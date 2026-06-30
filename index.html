@@ -7,17 +7,17 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="مصروفي" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <title>مصروفي | Masroofi V2.5</title>
+  <title>مصروفي | Masroofi V3.0</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icon-v5.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icon-180.png" />
-  <link rel="stylesheet" href="style.css?v=2.5.0" />
+  <link rel="stylesheet" href="style.css?v=3.0.0" />
 </head>
 <body>
   <div id="app" class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Masroofi V2</p>
+        <p class="eyebrow">Masroofi V3</p>
         <h1>مصروفي</h1>
       </div>
       <div class="auth-box">
@@ -52,6 +52,42 @@
             <span>عدد العمليات</span><strong id="countTotal">0</strong><small>كل العمليات المسجلة</small>
           </article>
         </div>
+
+        <section class="panel smart-panel">
+          <div class="panel-title"><h2>لوحة الإحصاءات الذكية</h2><span id="smartPeriodText">الشهر الحالي</span></div>
+          <div class="smart-grid">
+            <article class="smart-card">
+              <span>أكثر تصنيف هذا الشهر</span>
+              <strong id="topCategoryName">لا يوجد</strong>
+              <small id="topCategoryAmount">0 SAR</small>
+            </article>
+            <article class="smart-card">
+              <span>أكثر مستفيد</span>
+              <strong id="topBeneficiaryName">لا يوجد</strong>
+              <small id="topBeneficiaryAmount">0 SAR</small>
+            </article>
+            <article class="smart-card">
+              <span>أكثر مكان</span>
+              <strong id="topPlaceName">لا يوجد</strong>
+              <small id="topPlaceAmount">0 SAR</small>
+            </article>
+            <article class="smart-card highlight">
+              <span>متوسط الصرف اليومي</span>
+              <strong id="avgDailySpend">0 SAR</strong>
+              <small>من بداية الشهر حتى اليوم</small>
+            </article>
+            <article class="smart-card">
+              <span>مقارنة بنفس الفترة من الشهر الماضي</span>
+              <strong id="monthCompareText">لا توجد بيانات كافية</strong>
+              <small id="monthCompareAmount">0 SAR</small>
+            </article>
+            <article class="smart-card forecast">
+              <span>توقع الميزانية</span>
+              <strong id="budgetForecastText">اضبط الميزانية</strong>
+              <small id="budgetForecastSub">يعتمد على معدل الصرف اليومي</small>
+            </article>
+          </div>
+        </section>
 
         <section class="panel">
           <div class="panel-title"><h2>آخر العمليات</h2><button class="link-btn" data-nav="transactions">عرض الكل</button></div>
@@ -129,7 +165,7 @@
         </section>
         <section class="panel version-panel">
           <h2>معلومات التطبيق</h2>
-          <p class="muted">الإصدار الحالي: <strong>Masroofi V2.5</strong></p>
+          <p class="muted">الإصدار الحالي: <strong>Masroofi V3.0</strong></p>
         </section>
         <button class="btn ghost full" data-nav="home">رجوع للرئيسية</button>
       </section>

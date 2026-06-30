@@ -287,6 +287,91 @@ function openQuickDetails(type){
   setTimeout(()=>{ const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); bindItems(); }, 80);
 }
 
+
+function setText(id,value){ const el=$(id); if(el) el.textContent=value; }
+function setSmartClass(id,cls){ const el=$(id); if(!el) return; el.classList.remove('good','warn','bad'); if(cls) el.classList.add(cls); }
+function topBy(list, field){
+  const map = new Map();
+  list.forEach(e=>{
+    const label = String(e[field]||'').trim();
+    if(!label) return;
+    const current = map.get(label) || {label,total:0,count:0};
+    current.total += Number(e.amount||0);
+    current.count += 1;
+    map.set(label,current);
+  });
+  return [...map.values()].sort((a,b)=>b.total-a.total)[0] || null;
+}
+function samePeriodPreviousMonth(now=new Date()){
+  const y=now.getFullYear(), m=now.getMonth(), day=now.getDate();
+  const start = new Date(y,m-1,1,0,0,0,0);
+  const lastDay = new Date(y,m,0).getDate();
+  const endDay = Math.min(day,lastDay);
+  const end = new Date(y,m-1,endDay,23,59,59,999);
+  return {start,end};
+}
+function renderTopMetric(prefix, data){
+  setText(prefix+'Name', data ? data.label : 'لا يوجد');
+  setText(prefix+'Amount', data ? `${money(data.total)} · ${fmtNum(data.count)} عملية` : money(0));
+}
+function renderSmartDashboard(monthList, monthTotal, budget){
+  const now = new Date();
+  const daysElapsed = Math.max(1, now.getDate());
+  const avgDaily = monthTotal / daysElapsed;
+  const topCategory = topBy(monthList,'category');
+  const topBeneficiary = topBy(monthList,'beneficiary');
+  const topPlace = topBy(monthList,'place');
+  renderTopMetric('topCategory', topCategory);
+  renderTopMetric('topBeneficiary', topBeneficiary);
+  renderTopMetric('topPlace', topPlace);
+  setText('avgDailySpend', money(avgDaily));
+  const prevRange = samePeriodPreviousMonth(now);
+  const prevList = state.expenses.filter(e=>inRange(e, prevRange.start, prevRange.end));
+  const prevTotal = sum(prevList);
+  const diff = monthTotal - prevTotal;
+  const pct = prevTotal > 0 ? (diff / prevTotal) * 100 : null;
+  const compareEl = $('monthCompareText');
+  const compareAmountEl = $('monthCompareAmount');
+  if(prevTotal > 0){
+    const sign = diff > 0 ? '+' : '';
+    compareEl.textContent = `${sign}${fmtNum(pct)}%`;
+    compareEl.className = diff > 0 ? 'delta-up' : diff < 0 ? 'delta-down' : 'delta-neutral';
+    compareAmountEl.textContent = `${diff >= 0 ? 'زيادة' : 'انخفاض'} ${money(Math.abs(diff))}`;
+  } else {
+    compareEl.textContent = 'لا توجد بيانات كافية';
+    compareEl.className = 'delta-neutral';
+    compareAmountEl.textContent = 'أضف بيانات للشهر السابق للمقارنة';
+  }
+  const remaining = Number(budget||0) - monthTotal;
+  const forecastCard = $('budgetForecastText')?.closest('.smart-card');
+  if(forecastCard) forecastCard.classList.remove('good','warn','bad');
+  if(!budget){
+    setText('budgetForecastText','اضبط الميزانية');
+    setText('budgetForecastSub','أضف الميزانية الشهرية من الإعدادات');
+  } else if(remaining <= 0){
+    setText('budgetForecastText','تم تجاوز الميزانية');
+    setText('budgetForecastSub',`التجاوز الحالي: ${money(Math.abs(remaining))}`);
+    forecastCard?.classList.add('bad');
+  } else if(avgDaily <= 0){
+    setText('budgetForecastText','الميزانية آمنة');
+    setText('budgetForecastSub','لا توجد مصروفات كافية للتوقع');
+    forecastCard?.classList.add('good');
+  } else {
+    const daysLeftBySpend = Math.floor(remaining / avgDaily);
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+    const calendarDaysLeft = Math.max(0, daysInMonth - now.getDate());
+    if(daysLeftBySpend <= calendarDaysLeft){
+      setText('budgetForecastText',`قد تنفد بعد ${fmtNum(daysLeftBySpend)} يوم`);
+      setText('budgetForecastSub',`المتبقي: ${money(remaining)}`);
+      forecastCard?.classList.add(daysLeftBySpend <= 3 ? 'bad' : 'warn');
+    } else {
+      setText('budgetForecastText','متوقع أن تكفي لنهاية الشهر');
+      setText('budgetForecastSub',`المتبقي: ${money(remaining)}`);
+      forecastCard?.classList.add('good');
+    }
+  }
+}
+
 function renderAll(){ renderHome(); renderLists(); renderFilters(); renderCharts(); if(state.quickDetail && $('quickDetailsDialog')?.open){ const d=getQuickDetailData(state.quickDetail); $('quickDetailsSum').textContent=money(sum(d.list)); $('quickDetailsCount').textContent=`${fmtNum(d.list.length)} عملية`; $('quickDetailsList').innerHTML=d.list.length ? d.list.map(itemHtml).join('') : 'لا توجد عمليات.'; const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); } }
 function renderHome(){
   const now = new Date(); const tkey=todayISO(); const wr=weekRange(now); const mr=monthRange(now);
@@ -296,6 +381,7 @@ function renderHome(){
   $('budgetNote').textContent = budget ? `المستخدم من الميزانية: ${money(sm)}` : 'اضبط الميزانية من الإعدادات';
   $('todayLimitText').textContent=`الحد اليومي: ${money(state.settings.dailyLimit)}`; $('weekLimitText').textContent=`الحد الأسبوعي: ${money(state.settings.weeklyLimit)}`; $('monthLimitText').textContent=`الميزانية: ${money(budget)}`;
   setCardStatus($('todayCard'),st,state.settings.dailyLimit); setCardStatus($('weekCard'),sw,state.settings.weeklyLimit); setCardStatus($('monthCard'),sm,budget);
+  renderSmartDashboard(month, sm, budget);
 }
 function setCardStatus(el,total,limit){ el.classList.remove('ok','warn','bad','neutral'); if(!limit){el.classList.add('neutral'); return;} const r=total/limit; el.classList.add(r>1?'bad':r>=.5?'warn':'ok'); }
 function itemHtml(e){ return `<div class="item" data-id="${e.id}"><div><strong>${escapeHtml(e.category||'-')}</strong><div class="meta">${escapeHtml(e.beneficiary||'بدون مستفيد')} · ${escapeHtml(e.place||'بدون مكان')}</div><div class="meta">${displayDateTime(e)}</div></div><div class="amount">${money(e.amount)}</div></div>`; }

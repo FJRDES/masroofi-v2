@@ -185,3 +185,18 @@ input[type="time"]::-webkit-datetime-edit{
 .picker-display{
   box-shadow:none !important;
 }
+
+
+/* Masroofi V3.0 smart dashboard */
+.smart-panel{border-color:#ccfbf1;background:linear-gradient(180deg,#ffffff,#f8fffd)}
+.smart-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.smart-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:14px;min-width:0;box-shadow:0 10px 24px rgba(15,23,42,.05)}
+.smart-card span{display:block;color:var(--muted);font-weight:800;font-size:12px;margin-bottom:7px}
+.smart-card strong{display:block;color:var(--text);font-size:18px;line-height:1.35;word-break:break-word}
+.smart-card small{display:block;color:var(--primary);font-weight:800;margin-top:6px;direction:ltr;text-align:right}
+.smart-card.highlight{background:#ecfeff;border-color:#99f6e4}
+.smart-card.forecast{background:#f8fafc;border-style:dashed}
+.smart-card.good strong{color:#166534}.smart-card.warn strong{color:#b45309}.smart-card.bad strong{color:#b91c1c}
+.smart-card .delta-up{color:#b91c1c}.smart-card .delta-down{color:#166534}.smart-card .delta-neutral{color:#0f766e}
+@media (max-width:820px){.smart-grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:520px){.smart-grid{grid-template-columns:1fr}.smart-card{padding:13px;border-radius:18px}.smart-card strong{font-size:17px}}
