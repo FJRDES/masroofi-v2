@@ -22,7 +22,7 @@ enableIndexedDbPersistence(db).catch(()=>{});
 const provider = new GoogleAuthProvider();
 
 const $ = (id)=>document.getElementById(id);
-const state = { user:null, expenses:[], settings:{dailyLimit:0,weeklyLimit:0,monthlyBudget:0,currency:'SAR'}, unsub:[], quickDetail:null };
+const state = { user:null, expenses:[], settings:{dailyLimit:0,weeklyLimit:0,monthlyBudget:0,currency:'SAR',budgetCycleStart:'',budgetCycleEnd:''}, unsub:[], quickDetail:null };
 const arDays = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
 const fmtNum = (n)=> Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2});
 function displayTime(time){
@@ -93,6 +93,36 @@ function weekRange(d=new Date()){
 }
 function monthRange(d=new Date()){
   return {start:new Date(d.getFullYear(),d.getMonth(),1), end:new Date(d.getFullYear(),d.getMonth()+1,0,23,59,59,999)};
+}
+function validISODate(value){
+  const iso = normalizeDateValue(value);
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) && !Number.isNaN(toDateObj(iso,'12:00').getTime());
+}
+function budgetCycleRange(){
+  const startIso = normalizeDateValue(state.settings.budgetCycleStart || '');
+  const endIso = normalizeDateValue(state.settings.budgetCycleEnd || '');
+  if(validISODate(startIso) && validISODate(endIso)){
+    const start = toDateObj(startIso,'00:00');
+    const end = toDateObj(endIso,'23:59');
+    if(start <= end) return {start,end,startIso,endIso,isCustom:true};
+  }
+  const r = monthRange(new Date());
+  return {start:r.start,end:r.end,startIso:localISODate(r.start),endIso:localISODate(r.end),isCustom:false};
+}
+function listInBudgetCycle(excludeId=''){
+  const r = budgetCycleRange();
+  return state.expenses.filter(e=>inRange(e,r.start,r.end) && (!excludeId || e.id !== excludeId));
+}
+function daysLeftInCycle(){
+  const r = budgetCycleRange();
+  const today = toDateObj(todayISO(),'00:00');
+  const end = new Date(r.end); end.setHours(0,0,0,0);
+  if(today > end) return 0;
+  return Math.max(0, Math.floor((end - today) / 86400000) + 1);
+}
+function budgetCycleLabel(){
+  const r = budgetCycleRange();
+  return `${formatDisplayDate(r.startIso)} - ${formatDisplayDate(r.endIso)}`;
 }
 function inRange(exp,start,end){ const dt = toDateObj(exp.date, exp.time); return !Number.isNaN(dt.getTime()) && dt>=start && dt<=end; }
 function sum(list){ return list.reduce((a,b)=>a+Number(b.amount||0),0); }
@@ -248,11 +278,11 @@ $('expenseForm').addEventListener('submit', async(e)=>{
   };
   if(!payload.amount || !payload.category || !payload.beneficiary || !payload.place || !payload.date || !payload.time){ alert('أكمل جميع الحقول المطلوبة قبل الحفظ. الملاحظات فقط اختيارية.'); return; }
   const old = id ? state.expenses.find(x=>x.id===id) : null;
-  const delta = id ? (amount - Number(old?.amount||0)) : amount;
-  const mr = monthRange(toDateObj(payload.date,payload.time));
-  const monthTotal = sum(state.expenses.filter(x=> inRange(x,mr.start,mr.end) && x.id!==id));
-  if(state.settings.monthlyBudget > 0 && monthTotal + amount > state.settings.monthlyBudget){
-    alert('الميزانية لا تكفي. عدّل الميزانية من صفحة الإعدادات ثم أعد المحاولة.');
+  const cycle = budgetCycleRange();
+  const isInsideBudgetCycle = toDateObj(payload.date,payload.time) >= cycle.start && toDateObj(payload.date,payload.time) <= cycle.end;
+  const cycleTotal = sum(state.expenses.filter(x=> inRange(x,cycle.start,cycle.end) && x.id!==id));
+  if(isInsideBudgetCycle && state.settings.monthlyBudget > 0 && cycleTotal + amount > state.settings.monthlyBudget){
+    alert('الميزانية لا تكفي ضمن دورة الميزانية الحالية. عدّل الميزانية أو تواريخ الدورة من صفحة الإعدادات ثم أعد المحاولة.');
     return;
   }
   if(!confirmAction(id ? 'تأكيد حفظ التعديل؟' : 'تأكيد إضافة المصروف؟')) return;
@@ -317,16 +347,30 @@ function openQuickDetails(type){
 
 function renderAll(){ renderHome(); renderLists(); renderFilters(); renderCharts(); if(state.quickDetail && $('quickDetailsDialog')?.open){ const d=getQuickDetailData(state.quickDetail); $('quickDetailsSum').textContent=money(sum(d.list)); $('quickDetailsCount').textContent=`${fmtNum(d.list.length)} عملية`; $('quickDetailsList').innerHTML=d.list.length ? d.list.map(itemHtml).join('') : 'لا توجد عمليات.'; const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); } }
 function renderHome(){
-  const now = new Date(); const tkey=todayISO(); const wr=weekRange(now); const mr=monthRange(now);
-  const today = state.expenses.filter(e=>normalizeDateValue(e.date)===tkey); const week=state.expenses.filter(e=>inRange(e,wr.start,wr.end)); const month=state.expenses.filter(e=>inRange(e,mr.start,mr.end));
-  const st=sum(today), sw=sum(week), sm=sum(month); const budget = Number(state.settings.monthlyBudget||0); const remaining = budget - sm;
-  $('todayTotal').textContent=money(st); $('weekTotal').textContent=money(sw); $('monthTotal').textContent=money(sm); $('countTotal').textContent=fmtNum(state.expenses.length); $('budgetRemaining').textContent=money(remaining);
-  $('budgetNote').textContent = budget ? `المستخدم من الميزانية: ${money(sm)}` : 'اضبط الميزانية من الإعدادات';
+  const now = new Date(); const tkey=todayISO(); const wr=weekRange(now); const mr=monthRange(now); const br=budgetCycleRange();
+  const today = state.expenses.filter(e=>normalizeDateValue(e.date)===tkey);
+  const week=state.expenses.filter(e=>inRange(e,wr.start,wr.end));
+  const month=state.expenses.filter(e=>inRange(e,mr.start,mr.end));
+  const cycleList=state.expenses.filter(e=>inRange(e,br.start,br.end));
+  const st=sum(today), sw=sum(week), sm=sum(month), cycleUsed=sum(cycleList);
+  const budget = Number(state.settings.monthlyBudget||0);
+  const remaining = budget - cycleUsed;
+  $('todayTotal').textContent=money(st);
+  $('weekTotal').textContent=money(sw);
+  $('monthTotal').textContent=money(sm);
+  $('countTotal').textContent=fmtNum(state.expenses.length);
+  $('budgetRemaining').textContent=money(remaining);
+  $('budgetNote').textContent = budget ? `المستخدم من الميزانية: ${money(cycleUsed)} · دورة ${budgetCycleLabel()}` : 'اضبط ميزانية الدورة من الإعدادات';
+  if($('cyclePeriodText')) $('cyclePeriodText').textContent = br.isCustom ? budgetCycleLabel() : `الشهر الحالي ${displayMonthLabel(now)}`;
+  if($('cycleUsedTotal')) $('cycleUsedTotal').textContent = money(cycleUsed);
+  if($('cycleRemainingTotal')) $('cycleRemainingTotal').textContent = money(remaining);
+  if($('cycleDaysLeft')) $('cycleDaysLeft').textContent = fmtNum(daysLeftInCycle());
   $('todayLimitText').textContent=`الحد اليومي: ${money(state.settings.dailyLimit)} · ${formatDisplayDate(tkey)}`;
   $('weekLimitText').textContent=`الحد الأسبوعي: ${money(state.settings.weeklyLimit)} · ${displayDateRange(wr.start, wr.end)}`;
-  $('monthLimitText').textContent=`الميزانية: ${money(budget)} · شهر ${displayMonthLabel(now)}`;
-  if(budget) $('budgetNote').textContent = `المستخدم من الميزانية: ${money(sm)} · شهر ${displayMonthLabel(now)}`;
-  setCardStatus($('todayCard'),st,state.settings.dailyLimit); setCardStatus($('weekCard'),sw,state.settings.weeklyLimit); setCardStatus($('monthCard'),sm,budget);
+  $('monthLimitText').textContent=`الشهر الميلادي: ${displayMonthLabel(now)}`;
+  setCardStatus($('todayCard'),st,state.settings.dailyLimit);
+  setCardStatus($('weekCard'),sw,state.settings.weeklyLimit);
+  setCardStatus($('monthCard'),sm,0);
 }
 function setCardStatus(el,total,limit){ el.classList.remove('ok','warn','bad','neutral'); if(!limit){el.classList.add('neutral'); return;} const r=total/limit; el.classList.add(r>1?'bad':r>=.5?'warn':'ok'); }
 function itemHtml(e){ return `<div class="item" data-id="${e.id}"><div><strong>${escapeHtml(e.category||'-')}</strong><div class="meta">${escapeHtml(e.beneficiary||'بدون مستفيد')} · ${escapeHtml(e.place||'بدون مكان')}</div><div class="meta">${displayDateTime(e)}</div></div><div class="amount">${money(e.amount)}</div></div>`; }
@@ -355,8 +399,33 @@ function renderTransactions(){
 ['filterFrom','filterTo','filterText','useDateFilter','searchCategory','searchBeneficiary','searchPlace','searchNotes'].forEach(id=>setTimeout(()=>$((id))?.addEventListener('input',()=>{renderTransactions(); bindItems();}),0));
 function bindItems(){ document.querySelectorAll('.item').forEach(el=>el.onclick=()=>{ const e=state.expenses.find(x=>x.id===el.dataset.id); if(e) openExpense(e); }); }
 
-function fillSettings(){ $('dailyLimit').value=state.settings.dailyLimit||0; $('weeklyLimit').value=state.settings.weeklyLimit||0; $('monthlyBudget').value=state.settings.monthlyBudget||0; $('currency').value=state.settings.currency||'SAR'; }
-$('settingsForm').addEventListener('submit', async(e)=>{ e.preventDefault(); if(!state.user)return toast('سجل الدخول أولاً'); if(!confirmAction('تأكيد حفظ الإعدادات؟'))return; await setDoc(settingsDoc(),{dailyLimit:Number($('dailyLimit').value||0),weeklyLimit:Number($('weeklyLimit').value||0),monthlyBudget:Number($('monthlyBudget').value||0),currency:$('currency').value.trim()||'SAR',updatedAt:serverTimestamp()},{merge:true}); toast('تم حفظ الإعدادات'); });
+function fillSettings(){
+  $('dailyLimit').value=state.settings.dailyLimit||0;
+  $('weeklyLimit').value=state.settings.weeklyLimit||0;
+  $('monthlyBudget').value=state.settings.monthlyBudget||0;
+  $('currency').value=state.settings.currency||'SAR';
+  if($('budgetCycleStart')) $('budgetCycleStart').value=normalizeDateValue(state.settings.budgetCycleStart||'');
+  if($('budgetCycleEnd')) $('budgetCycleEnd').value=normalizeDateValue(state.settings.budgetCycleEnd||'');
+}
+$('settingsForm').addEventListener('submit', async(e)=>{
+  e.preventDefault();
+  if(!state.user)return toast('سجل الدخول أولاً');
+  const cycleStart=normalizeDateValue($('budgetCycleStart')?.value||'');
+  const cycleEnd=normalizeDateValue($('budgetCycleEnd')?.value||'');
+  if((cycleStart || cycleEnd) && !(validISODate(cycleStart) && validISODate(cycleEnd))){ alert('أدخل بداية ونهاية دورة الميزانية بشكل صحيح.'); return; }
+  if(cycleStart && cycleEnd && toDateObj(cycleStart,'00:00') > toDateObj(cycleEnd,'23:59')){ alert('تاريخ بداية دورة الميزانية يجب أن يكون قبل تاريخ النهاية.'); return; }
+  if(!confirmAction('تأكيد حفظ الإعدادات؟'))return;
+  await setDoc(settingsDoc(),{
+    dailyLimit:Number($('dailyLimit').value||0),
+    weeklyLimit:Number($('weeklyLimit').value||0),
+    monthlyBudget:Number($('monthlyBudget').value||0),
+    budgetCycleStart:cycleStart,
+    budgetCycleEnd:cycleEnd,
+    currency:$('currency').value.trim()||'SAR',
+    updatedAt:serverTimestamp()
+  },{merge:true});
+  toast('تم حفظ الإعدادات');
+});
 
 function drawLine(canvas, labels, values){
   const ctx=canvas.getContext('2d');
@@ -411,7 +480,15 @@ function downloadBlob(content,filename,type){ const a=document.createElement('a'
 $('backupJsonBtn').onclick=()=> downloadBlob(JSON.stringify({settings:state.settings, expenses:state.expenses},null,2),'masroofi_backup.json','application/json');
 $('restoreJsonInput').onchange=async(e)=>{ const file=e.target.files[0]; if(!file||!state.user)return; if(!confirmAction('سيتم استيراد العمليات إلى حسابك. هل تريد المتابعة؟'))return; const data=JSON.parse(await file.text()); const batch=writeBatch(db); if(data.settings) batch.set(settingsDoc(),data.settings,{merge:true}); (data.expenses||[]).forEach(x=>{const ref=doc(expensesCol()); const {id,...rest}=x; batch.set(ref,{...rest,updatedAt:serverTimestamp()});}); await batch.commit(); toast('تمت الاستعادة'); };
 $('printSearchBtn').onclick=()=> printReport('تقرير البحث', currentFiltered(), {chartTitle:'رسم نتائج البحث', chartMode:'auto'});
-document.querySelectorAll('[data-report]').forEach(btn=>btn.onclick=()=>{ const type=btn.dataset.report, now=new Date(); let title='', list=[], chartMode='auto', chartTitle='الرسم البياني'; if(type==='daily'){title='التقرير اليومي'; list=state.expenses.filter(e=>normalizeDateValue(e.date)===todayISO()); chartMode='hour'; chartTitle='مصروفات اليوم حسب الساعة';} if(type==='weekly'){title='التقرير الأسبوعي'; const r=weekRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end)); chartMode='week'; chartTitle='مصروفات الأسبوع من الأحد إلى السبت';} if(type==='monthly'){title='التقرير الشهري'; const r=monthRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end)); chartMode='month'; chartTitle='مصروفات الشهر حسب الأيام';} printReport(title, sortExpenses(list), {chartTitle, chartMode}); });
+document.querySelectorAll('[data-report]').forEach(btn=>btn.onclick=()=>{
+  const type=btn.dataset.report, now=new Date();
+  let title='', list=[], chartMode='auto', chartTitle='الرسم البياني';
+  if(type==='daily'){title='التقرير اليومي'; list=state.expenses.filter(e=>normalizeDateValue(e.date)===todayISO()); chartMode='hour'; chartTitle='مصروفات اليوم حسب الساعة';}
+  if(type==='weekly'){title='التقرير الأسبوعي'; const r=weekRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end)); chartMode='week'; chartTitle='مصروفات الأسبوع من الأحد إلى السبت';}
+  if(type==='monthly'){title='التقرير الشهري الميلادي'; const r=monthRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end)); chartMode='month'; chartTitle='مصروفات الشهر الميلادي حسب الأيام';}
+  if(type==='cycle'){const r=budgetCycleRange(); title=`تقرير دورة الميزانية ${budgetCycleLabel()}`; list=state.expenses.filter(e=>inRange(e,r.start,r.end)); chartMode='date'; chartTitle='مصروفات دورة الميزانية حسب التاريخ';}
+  printReport(title, sortExpenses(list), {chartTitle, chartMode});
+});
 function reportChartData(list, mode='auto'){
   const sorted=sortExpenses(list);
   if(mode==='hour') return groupByHour(sorted);
