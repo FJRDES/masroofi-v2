@@ -1,5 +1,5 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js';
-import { initializeAuth, browserLocalPersistence, browserPopupRedirectResolver, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js';
+import { initializeAuth, browserLocalPersistence, browserPopupRedirectResolver, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js';
 import { getFirestore, doc, collection, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, enableIndexedDbPersistence, writeBatch } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -51,8 +51,7 @@ function settingsDoc(){ return doc(db,'users',state.user.uid,'settings','main');
 function cleanup(){ state.unsub.forEach(u=>u&&u()); state.unsub=[]; }
 
 // إعداد تسجيل الدخول بحساب Google
-// هذه النسخة تستخدم Popup أولاً لأنها أوضح على Safari عند ظهور Allow،
-// ثم تستخدم Redirect كخطة بديلة إذا منع المتصفح النافذة.
+// نسخة خاصة للآيفون/Safari: نستخدم Redirect فقط حتى لا يعلق على صفحة auth/handler البيضاء.
 auth.languageCode = 'ar';
 provider.addScope('email');
 provider.addScope('profile');
@@ -78,24 +77,11 @@ getRedirectResult(auth)
 
 $('loginBtn').onclick = async () => {
   try {
-    toast('جار فتح تسجيل الدخول...');
-    await signInWithPopup(auth, provider);
-  } catch (popupError) {
-    console.error('Firebase sign-in popup error:', popupError);
-    const code = popupError?.code || '';
-
-    // إذا منع Safari النافذة أو أغلقها المستخدم، نستخدم التحويل الكامل للصفحة.
-    if (code.includes('popup') || code.includes('cancelled') || code.includes('blocked') || code.includes('closed')) {
-      try {
-        toast('سيتم تحويلك إلى صفحة Google لتسجيل الدخول...');
-        await signInWithRedirect(auth, provider);
-      } catch (redirectError) {
-        console.error('Firebase sign-in redirect error:', redirectError);
-        alert('تعذر تسجيل الدخول: ' + (redirectError?.code || '') + ' - ' + (redirectError?.message || redirectError));
-      }
-    } else {
-      alert('تعذر تسجيل الدخول: ' + code + ' - ' + (popupError?.message || popupError));
-    }
+    toast('سيتم تحويلك إلى Google لتسجيل الدخول...');
+    await signInWithRedirect(auth, provider);
+  } catch (e) {
+    console.error('Firebase sign-in redirect error:', e);
+    alert('تعذر بدء تسجيل الدخول: ' + (e?.code || '') + ' - ' + (e?.message || e));
   }
 };
 $('logoutBtn').onclick = async()=>{ if(confirmAction('هل تريد تسجيل الخروج؟')) await signOut(auth); };
