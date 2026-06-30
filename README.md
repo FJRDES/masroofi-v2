@@ -53,3 +53,7 @@ service cloud.firestore {
 2. أضف مصروفًا.
 3. افتح الرابط من الآيفون وسجل الدخول بنفس حساب Google.
 4. ستظهر العملية تلقائيًا.
+
+
+## تحديث تسجيل الدخول
+تم تحديث app.js لاستخدام Popup أولاً مع fallback إلى Redirect، مع معالجة أفضل لجلسة Firebase على GitHub Pages وSafari.

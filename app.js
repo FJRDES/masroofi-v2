@@ -1,5 +1,5 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js';
-import { initializeAuth, browserLocalPersistence, browserPopupRedirectResolver, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js';
+import { initializeAuth, browserLocalPersistence, browserPopupRedirectResolver, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js';
 import { getFirestore, doc, collection, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, enableIndexedDbPersistence, writeBatch } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -51,13 +51,11 @@ function settingsDoc(){ return doc(db,'users',state.user.uid,'settings','main');
 function cleanup(){ state.unsub.forEach(u=>u&&u()); state.unsub=[]; }
 
 // إعداد تسجيل الدخول بحساب Google
-// نسخة خاصة للآيفون/Safari: نستخدم Redirect فقط حتى لا يعلق على صفحة auth/handler البيضاء.
+// نسخة مستقرة: نحاول Popup أولاً لأنه أنسب مع GitHub Pages، ونستخدم Redirect كخطة بديلة.
 auth.languageCode = 'ar';
 provider.addScope('email');
 provider.addScope('profile');
-provider.setCustomParameters({
-  prompt: 'select_account'
-});
+provider.setCustomParameters({ prompt: 'select_account' });
 
 window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled promise rejection:', event.reason);
@@ -66,43 +64,76 @@ window.addEventListener('error', (event) => {
   console.error('JavaScript error:', event.message, event.error);
 });
 
-getRedirectResult(auth)
-  .then((result) => {
-    if (result?.user) toast('تم تسجيل الدخول بنجاح');
-  })
-  .catch((e) => {
-    console.error('Firebase redirect sign-in error:', e);
-    alert('خطأ في نتيجة تسجيل الدخول: ' + (e?.code || '') + ' - ' + (e?.message || e));
-  });
+function showAuthError(prefix, e) {
+  console.error(prefix, e);
+  const code = e?.code || '';
+  const message = e?.message || e;
+  alert(`${prefix}: ${code} - ${message}`);
+}
 
-$('loginBtn').onclick = async () => {
+async function startLogin() {
   try {
-    toast('سيتم تحويلك إلى Google لتسجيل الدخول...');
-    await signInWithRedirect(auth, provider);
+    $('loginBtn').disabled = true;
+    toast('جاري فتح تسجيل الدخول...');
+
+    // Popup يعمل بشكل أفضل مع GitHub Pages لأنه لا يعتمد على استرجاع جلسة Redirect بين نطاقين.
+    try {
+      await signInWithPopup(auth, provider);
+      return;
+    } catch (popupError) {
+      console.warn('Popup sign-in failed, trying redirect...', popupError);
+      const fallbackCodes = new Set([
+        'auth/popup-blocked',
+        'auth/popup-closed-by-user',
+        'auth/cancelled-popup-request',
+        'auth/operation-not-supported-in-this-environment'
+      ]);
+
+      // إذا كان الخطأ إعدادات مثل unauthorized-domain نعرضه مباشرة بدل التحويل.
+      if (!fallbackCodes.has(popupError?.code)) {
+        throw popupError;
+      }
+
+      toast('سيتم تحويلك إلى Google لتسجيل الدخول...');
+      await signInWithRedirect(auth, provider);
+    }
   } catch (e) {
-    console.error('Firebase sign-in redirect error:', e);
-    alert('تعذر بدء تسجيل الدخول: ' + (e?.code || '') + ' - ' + (e?.message || e));
+    showAuthError('تعذر بدء تسجيل الدخول', e);
+  } finally {
+    $('loginBtn').disabled = false;
   }
-};
+}
+
+$('loginBtn').onclick = startLogin;
 $('logoutBtn').onclick = async()=>{ if(confirmAction('هل تريد تسجيل الخروج؟')) await signOut(auth); };
 
-onAuthStateChanged(auth, async(user)=>{
-  cleanup(); state.user=user;
-  $('loginBtn').classList.toggle('hidden',!!user);
-  $('logoutBtn').classList.toggle('hidden',!user);
-  $('syncStatus').textContent = user ? 'متصل بالسحابة' : 'غير متصل';
-  if(!user){ state.expenses=[]; renderAll(); return; }
-  await setDoc(userBase(), {email:user.email, displayName:user.displayName||'', updatedAt:serverTimestamp()}, {merge:true});
-  state.unsub.push(onSnapshot(settingsDoc(), snap=>{
-    if(snap.exists()) state.settings = {...state.settings, ...snap.data()};
-    else setDoc(settingsDoc(), state.settings, {merge:true});
-    fillSettings(); renderAll();
-  }));
-  state.unsub.push(onSnapshot(query(expensesCol(), orderBy('dateTime','desc')), snap=>{
-    state.expenses = snap.docs.map(d=>({id:d.id,...d.data()}));
-    renderAll();
-  }, err=>{ console.error(err); toast('تحقق من قواعد Firestore والاتصال'); }));
-});
+async function bootAuth(){
+  try {
+    const result = await getRedirectResult(auth);
+    if (result?.user) toast('تم تسجيل الدخول بنجاح');
+  } catch (e) {
+    showAuthError('خطأ في نتيجة تسجيل الدخول', e);
+  }
+
+  onAuthStateChanged(auth, async(user)=>{
+    cleanup(); state.user=user;
+    $('loginBtn').classList.toggle('hidden',!!user);
+    $('logoutBtn').classList.toggle('hidden',!user);
+    $('syncStatus').textContent = user ? 'متصل بالسحابة' : 'غير متصل';
+    if(!user){ state.expenses=[]; renderAll(); return; }
+    await setDoc(userBase(), {email:user.email, displayName:user.displayName||'', updatedAt:serverTimestamp()}, {merge:true});
+    state.unsub.push(onSnapshot(settingsDoc(), snap=>{
+      if(snap.exists()) state.settings = {...state.settings, ...snap.data()};
+      else setDoc(settingsDoc(), state.settings, {merge:true});
+      fillSettings(); renderAll();
+    }));
+    state.unsub.push(onSnapshot(query(expensesCol(), orderBy('dateTime','desc')), snap=>{
+      state.expenses = snap.docs.map(d=>({id:d.id,...d.data()}));
+      renderAll();
+    }, err=>{ console.error(err); toast('تحقق من قواعد Firestore والاتصال'); }));
+  });
+}
+bootAuth();
 
 function nav(view){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
