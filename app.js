@@ -162,29 +162,49 @@ function openExpense(exp=null){
   $('expenseDialog').showModal();
 }
 $('date').addEventListener('change', ()=> $('dayName').value = dayNameFromDate($('date').value));
+$('amount').addEventListener('keydown', (e)=>{
+  if(['e','E','+','-'].includes(e.key)) e.preventDefault();
+});
+$('amount').addEventListener('input', ()=>{
+  const clean = $('amount').value.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');
+  if($('amount').value !== clean) $('amount').value = clean;
+});
 
 $('expenseForm').addEventListener('submit', async(e)=>{
   e.preventDefault();
   if(!state.user){ toast('سجل الدخول أولاً'); return; }
   const id = $('expenseId').value;
-  const amount = Number($('amount').value);
+  const rawAmount = String($('amount').value).trim();
+  const amount = Number(rawAmount);
+  if(!rawAmount || !Number.isFinite(amount) || amount <= 0){
+    alert('حقل المبلغ يجب أن يكون رقمًا صحيحًا أكبر من صفر.');
+    $('amount').focus();
+    return;
+  }
   const payload = {
     amount,
     category:$('category').value.trim(), beneficiary:$('beneficiary').value.trim(), place:$('place').value.trim(), notes:$('notes').value.trim(),
     date:$('date').value, time:$('time').value, dayName:$('dayName').value.trim() || dayNameFromDate($('date').value),
     dateTime: toDateObj($('date').value,$('time').value).toISOString(), updatedAt:serverTimestamp()
   };
-  if(!payload.amount || !payload.category || !payload.date || !payload.time){ toast('أكمل الحقول الأساسية'); return; }
+  if(!payload.amount || !payload.category || !payload.date || !payload.time){ alert('أكمل الحقول الأساسية قبل الحفظ.'); return; }
   const old = id ? state.expenses.find(x=>x.id===id) : null;
   const delta = id ? (amount - Number(old?.amount||0)) : amount;
   const mr = monthRange(toDateObj(payload.date,payload.time));
   const monthTotal = sum(state.expenses.filter(x=> inRange(x,mr.start,mr.end) && x.id!==id));
   if(state.settings.monthlyBudget > 0 && monthTotal + amount > state.settings.monthlyBudget){
-    toast('الميزانية لا تكفي. عدل الميزانية من الإعدادات.'); return;
+    alert('الميزانية لا تكفي. عدّل الميزانية من صفحة الإعدادات ثم أعد المحاولة.');
+    return;
   }
   if(!confirmAction(id ? 'تأكيد حفظ التعديل؟' : 'تأكيد إضافة المصروف؟')) return;
-  if(id) await updateDoc(doc(expensesCol(), id), payload); else await addDoc(expensesCol(), {...payload, createdAt:serverTimestamp()});
-  $('expenseDialog').close(); toast(id?'تم تعديل العملية':'تمت إضافة المصروف');
+  try{
+    if(id) await updateDoc(doc(expensesCol(), id), payload); else await addDoc(expensesCol(), {...payload, createdAt:serverTimestamp()});
+    $('expenseDialog').close(); toast(id?'تم تعديل العملية':'تمت إضافة المصروف');
+  }catch(err){
+    console.error(err);
+    alert('تعذر حفظ العملية. تحقق من الاتصال أو صلاحيات Firestore.
+' + (err?.message || err));
+  }
 });
 $('deleteExpenseBtn').onclick = async()=>{
   const id=$('expenseId').value; if(!id) return;
@@ -202,7 +222,7 @@ function renderHome(){
   $('todayLimitText').textContent=`الحد اليومي: ${money(state.settings.dailyLimit)}`; $('weekLimitText').textContent=`الحد الأسبوعي: ${money(state.settings.weeklyLimit)}`; $('monthLimitText').textContent=`الميزانية: ${money(budget)}`;
   setCardStatus($('todayCard'),st,state.settings.dailyLimit); setCardStatus($('weekCard'),sw,state.settings.weeklyLimit); setCardStatus($('monthCard'),sm,budget);
 }
-function setCardStatus(el,total,limit){ el.classList.remove('ok','warn','bad'); if(!limit){el.classList.add('neutral'); return;} const r=total/limit; el.classList.add(r>=1?'bad':r>=.8?'warn':'ok'); }
+function setCardStatus(el,total,limit){ el.classList.remove('ok','warn','bad','neutral'); if(!limit){el.classList.add('neutral'); return;} const r=total/limit; el.classList.add(r>1?'bad':r>=.5?'warn':'ok'); }
 function itemHtml(e){ return `<div class="item" data-id="${e.id}"><div><strong>${escapeHtml(e.category||'-')}</strong><div class="meta">${escapeHtml(e.beneficiary||'بدون مستفيد')} · ${escapeHtml(e.place||'بدون مكان')}</div><div class="meta">${e.date} · ${e.time||''} · ${escapeHtml(e.dayName||'')}</div></div><div class="amount">${money(e.amount)}</div></div>`; }
 function renderLists(){
   const recent = sortExpenses(state.expenses).slice(0,5);
@@ -233,13 +253,46 @@ function fillSettings(){ $('dailyLimit').value=state.settings.dailyLimit||0; $('
 $('settingsForm').addEventListener('submit', async(e)=>{ e.preventDefault(); if(!state.user)return toast('سجل الدخول أولاً'); if(!confirmAction('تأكيد حفظ الإعدادات؟'))return; await setDoc(settingsDoc(),{dailyLimit:Number($('dailyLimit').value||0),weeklyLimit:Number($('weeklyLimit').value||0),monthlyBudget:Number($('monthlyBudget').value||0),currency:$('currency').value.trim()||'SAR',updatedAt:serverTimestamp()},{merge:true}); toast('تم حفظ الإعدادات'); });
 
 function drawLine(canvas, labels, values){
-  const ctx=canvas.getContext('2d'), w=canvas.clientWidth||600, h=Number(canvas.getAttribute('height'))||145, dpr=window.devicePixelRatio||1; canvas.width=w*dpr; canvas.height=h*dpr; ctx.scale(dpr,dpr); ctx.clearRect(0,0,w,h);
-  const pad=28, max=Math.max(...values,1); ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=1; for(let i=0;i<4;i++){ const y=pad+(h-pad*2)*i/3; ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke(); }
-  const pts=values.map((v,i)=>({x:pad+(w-pad*2)*(values.length===1?0.5:i/(values.length-1)), y:h-pad-(v/max)*(h-pad*2)}));
-  ctx.strokeStyle='#0f766e'; ctx.lineWidth=3; ctx.beginPath(); pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
-  ctx.fillStyle='#14b8a6'; pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fill();});
-  ctx.fillStyle='#64748b'; ctx.font='11px system-ui'; ctx.textAlign='center'; labels.forEach((l,i)=>{ if(i%Math.ceil(labels.length/6)===0 || labels.length<=6) ctx.fillText(l, pts[i].x, h-8); });
+  const ctx=canvas.getContext('2d');
+  const w=Math.max(canvas.parentElement?.clientWidth || canvas.clientWidth || 600, 280);
+  const h=145;
+  const dpr=window.devicePixelRatio||1;
+  canvas.style.height=h+'px';
+  canvas.width=w*dpr; canvas.height=h*dpr; ctx.scale(dpr,dpr); ctx.clearRect(0,0,w,h);
+  const padL=38, padR=14, padT=16, padB=26;
+  const maxRaw=Math.max(...values,0);
+  const max=maxRaw>0 ? maxRaw*1.18 : 1;
+  ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=1;
+  ctx.fillStyle='#64748b'; ctx.font='10px system-ui'; ctx.textAlign='left';
+  for(let i=0;i<4;i++){
+    const y=padT+(h-padT-padB)*i/3;
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+    const val=max-(max*i/3); ctx.fillText(fmtNum(val),4,y+3);
+  }
+  const pts=values.map((v,i)=>({
+    x:padL+(w-padL-padR)*(values.length===1?0.5:i/(values.length-1)),
+    y:h-padB-(Math.max(0,v)/max)*(h-padT-padB)
+  }));
+  ctx.strokeStyle='#0f766e'; ctx.lineWidth=3; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath(); pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+  ctx.fillStyle='#14b8a6'; pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,3.5,0,Math.PI*2);ctx.fill();});
+  ctx.fillStyle='#64748b'; ctx.font='10px system-ui'; ctx.textAlign='center';
+  const step=Math.max(1,Math.ceil(labels.length/6));
+  labels.forEach((l,i)=>{ if(i%step===0 || labels.length<=6) ctx.fillText(l, pts[i].x, h-8); });
 }
+
+function svgLine(labels, values, title){
+  const w=720, h=210, padL=54, padR=24, padT=34, padB=36;
+  const maxRaw=Math.max(...values,0); const max=maxRaw>0?maxRaw*1.18:1;
+  const pts=values.map((v,i)=>({x:padL+(w-padL-padR)*(values.length===1?0.5:i/(values.length-1)), y:h-padB-(Math.max(0,v)/max)*(h-padT-padB)}));
+  const line=pts.map((p,i)=>(i?'L':'M')+p.x.toFixed(1)+' '+p.y.toFixed(1)).join(' ');
+  const step=Math.max(1,Math.ceil(labels.length/6));
+  const xlabels=labels.map((l,i)=> (i%step===0 || labels.length<=6) ? `<text x="${pts[i].x.toFixed(1)}" y="${h-10}" text-anchor="middle" font-size="11" fill="#64748b">${escapeHtml(l)}</text>` : '').join('');
+  const grids=[0,1,2,3].map(i=>{const y=padT+(h-padT-padB)*i/3; return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#e2e8f0"/><text x="8" y="${y+4}" font-size="11" fill="#64748b">${fmtNum(max-(max*i/3))}</text>`}).join('');
+  const circles=pts.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#14b8a6"/>`).join('');
+  return `<div class="chart-print"><h3>${escapeHtml(title)}</h3><svg viewBox="0 0 ${w} ${h}" width="100%" height="210" xmlns="http://www.w3.org/2000/svg"><rect width="${w}" height="${h}" rx="18" fill="#ffffff" stroke="#e2e8f0"/>${grids}<path d="${line}" fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${circles}${xlabels}</svg></div>`;
+}
+
 function groupByHour(list){ const labels=Array.from({length:24},(_,i)=>String(i).padStart(2,'0')); const vals=labels.map(()=>0); list.forEach(e=>{const h=Number((e.time||'00:00').slice(0,2)); vals[h]+=Number(e.amount||0);}); return {labels,vals}; }
 function groupByWeekDays(list,wr){ const labels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']; const vals=labels.map(()=>0); list.forEach(e=>{ vals[toDateObj(e.date,e.time).getDay()]+=Number(e.amount||0); }); return {labels,vals}; }
 function groupByMonthDays(list,mr){ const days=new Date(mr.end).getDate(); const labels=Array.from({length:days},(_,i)=>String(i+1)); const vals=labels.map(()=>0); list.forEach(e=>{ vals[toDateObj(e.date,e.time).getDate()-1]+=Number(e.amount||0); }); return {labels,vals}; }
@@ -254,9 +307,15 @@ $('restoreJsonInput').onchange=async(e)=>{ const file=e.target.files[0]; if(!fil
 $('printSearchBtn').onclick=()=> printReport('تقرير البحث', currentFiltered());
 document.querySelectorAll('[data-report]').forEach(btn=>btn.onclick=()=>{ const type=btn.dataset.report, now=new Date(); let title='', list=[]; if(type==='daily'){title='التقرير اليومي'; list=state.expenses.filter(e=>e.date===todayISO());} if(type==='weekly'){title='التقرير الأسبوعي'; const r=weekRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end));} if(type==='monthly'){title='التقرير الشهري'; const r=monthRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end));} printReport(title, sortExpenses(list)); });
 function printReport(title,list){
-  const rows=list.map(e=>`<tr><td>${e.date}</td><td>${e.time||''}</td><td>${escapeHtml(e.category||'')}</td><td>${escapeHtml(e.beneficiary||'')}</td><td>${escapeHtml(e.place||'')}</td><td>${money(e.amount)}</td></tr>`).join('');
-  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111}h1{margin:0 0 12px}.summary{display:flex;gap:12px;margin:16px 0}.box{border:1px solid #ddd;border-radius:12px;padding:12px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}.ltr{direction:ltr;text-align:left}@media print{button{display:none}}</style></head><body><h1>${title}</h1><p>${new Date().toLocaleString('en-US')}</p><div class="summary"><div class="box">عدد العمليات: ${fmtNum(list.length)}</div><div class="box">الإجمالي: ${money(sum(list))}</div></div><table><thead><tr><th>التاريخ</th><th>الوقت</th><th>التصنيف</th><th>المستفيد</th><th>المكان</th><th>المبلغ</th></tr></thead><tbody>${rows||'<tr><td colspan="6">لا توجد عمليات</td></tr>'}</tbody></table><p>الرسوم البيانية موجودة داخل صفحة التطبيق وتتحدث تلقائيًا حسب البيانات الحالية.</p><button onclick="print()">طباعة / حفظ PDF</button></body></html>`;
-  const w=window.open('','_blank'); w.document.write(html); w.document.close(); setTimeout(()=>w.print(),500);
+  const sorted=sortExpenses(list);
+  const rows=sorted.map(e=>`<tr><td>${e.date}</td><td>${e.time||''}</td><td>${escapeHtml(e.category||'')}</td><td>${escapeHtml(e.beneficiary||'')}</td><td>${escapeHtml(e.place||'')}</td><td>${money(e.amount)}</td></tr>`).join('');
+  const gDay=groupByHour(sorted); const gWeek=groupByWeekDays(sorted); const daysInMonth=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
+  const monthLabels=Array.from({length:daysInMonth},(_,i)=>String(i+1)); const monthVals=monthLabels.map(()=>0); sorted.forEach(e=>{const ix=toDateObj(e.date,e.time).getDate()-1; if(ix>=0&&ix<monthVals.length) monthVals[ix]+=Number(e.amount||0);});
+  const charts = svgLine(gDay.labels,gDay.vals,'رسم مصروفات حسب الساعة') + svgLine(gWeek.labels,gWeek.vals,'رسم مصروفات حسب أيام الأسبوع') + svgLine(monthLabels,monthVals,'رسم مصروفات حسب أيام الشهر');
+  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111;background:#fff}h1{margin:0 0 12px}.summary{display:flex;gap:12px;margin:16px 0;flex-wrap:wrap}.box{border:1px solid #ddd;border-radius:12px;padding:12px;background:#fafafa}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}.toolbar{display:flex;gap:10px;margin:16px 0;flex-wrap:wrap}.toolbar button{border:0;border-radius:12px;padding:10px 14px;font-weight:700;background:#0f766e;color:white}.toolbar button.secondary{background:#e6fffb;color:#0f766e}.charts{margin-top:22px;display:grid;gap:14px}.chart-print{page-break-inside:avoid;border:1px solid #e5e7eb;border-radius:14px;padding:10px}.chart-print h3{margin:0 0 8px}@media print{.toolbar{display:none}body{padding:0}.chart-print{break-inside:avoid}}</style></head><body><h1>${title}</h1><p>${new Date().toLocaleString('en-US')}</p><div class="toolbar"><button onclick="print()">طباعة / حفظ PDF</button><button class="secondary" onclick="window.close(); if(!window.closed){history.back();}">العودة للتطبيق</button></div><div class="summary"><div class="box">عدد العمليات: ${fmtNum(sorted.length)}</div><div class="box">الإجمالي: ${money(sum(sorted))}</div></div><table><thead><tr><th>التاريخ</th><th>الوقت</th><th>التصنيف</th><th>المستفيد</th><th>المكان</th><th>المبلغ</th></tr></thead><tbody>${rows||'<tr><td colspan="6">لا توجد عمليات</td></tr>'}</tbody></table><div class="charts">${charts}</div></body></html>`;
+  const w=window.open('','_blank');
+  if(!w){ alert('لم يتم فتح التقرير. اسمح بالنوافذ المنبثقة ثم حاول مرة أخرى.'); return; }
+  w.document.write(html); w.document.close();
 }
 function escapeHtml(s){ return String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 

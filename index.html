@@ -54,17 +54,17 @@
         </div>
 
         <section class="panel">
+          <div class="panel-title"><h2>آخر العمليات</h2><button class="link-btn" data-nav="transactions">عرض الكل</button></div>
+          <div id="recentList" class="list empty">لا توجد عمليات بعد.</div>
+        </section>
+
+        <section class="panel">
           <div class="panel-title"><h2>الرسوم البيانية</h2><span>تتحدث تلقائيًا</span></div>
           <div class="chart-stack">
             <div class="chart-card"><h3>مصروفات اليوم</h3><canvas id="chartToday" height="145"></canvas></div>
             <div class="chart-card"><h3>مصروفات الأسبوع</h3><canvas id="chartWeek" height="145"></canvas></div>
             <div class="chart-card"><h3>مصروفات الشهر</h3><canvas id="chartMonth" height="145"></canvas></div>
           </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-title"><h2>آخر العمليات</h2><button class="link-btn" data-nav="transactions">عرض الكل</button></div>
-          <div id="recentList" class="list empty">لا توجد عمليات بعد.</div>
         </section>
       </section>
 
@@ -145,7 +145,7 @@
       <div class="modal-head"><h2 id="expenseDialogTitle">إضافة مصروف</h2><button type="button" class="icon-btn" data-close-dialog>×</button></div>
       <input id="expenseId" type="hidden" />
       <div class="form-grid">
-        <label>المبلغ<input id="amount" type="number" inputmode="decimal" min="0.01" step="0.01" required /></label>
+        <label>المبلغ<input id="amount" type="number" inputmode="decimal" min="0.01" step="0.01" autocomplete="off" required /></label>
         <label>التصنيف<input id="category" type="text" placeholder="بقالة، مطعم، وقود..." required /></label>
         <label>المستفيد أو المستفيدين<input id="beneficiary" type="text" placeholder="اسم المستفيد" /></label>
         <label>المكان<input id="place" type="text" placeholder="المكان" /></label>
