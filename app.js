@@ -202,8 +202,7 @@ $('expenseForm').addEventListener('submit', async(e)=>{
     $('expenseDialog').close(); toast(id?'تم تعديل العملية':'تمت إضافة المصروف');
   }catch(err){
     console.error(err);
-    alert('تعذر حفظ العملية. تحقق من الاتصال أو صلاحيات Firestore.
-' + (err?.message || err));
+    alert('تعذر حفظ العملية. تحقق من الاتصال أو صلاحيات Firestore.\n' + (err?.message || err));
   }
 });
 $('deleteExpenseBtn').onclick = async()=>{
