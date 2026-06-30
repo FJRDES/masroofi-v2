@@ -30,7 +30,7 @@ function displayTime(time){
   const [hh='0', mm='00'] = String(time).split(':');
   let h = Number(hh);
   if(!Number.isFinite(h)) return time;
-  const suffix = h >= 12 ? 'م' : 'ص';
+  const suffix = h >= 12 ? 'PM' : 'AM';
   h = h % 12 || 12;
   return `${h}:${String(mm).padStart(2,'0')} ${suffix}`;
 }
@@ -38,7 +38,7 @@ function displayDateTime(e){
   return `${e.date || ''} · ${displayTime(e.time)} · ${escapeHtml(e.dayName||'')}`;
 }
 function hourLabel(i){
-  const suffix = i >= 12 ? 'م' : 'ص';
+  const suffix = i >= 12 ? 'PM' : 'AM';
   const h = i % 12 || 12;
   return `${h}${suffix}`;
 }
@@ -409,11 +409,108 @@ function printReport(title,list, options={}){
 function escapeHtml(s){ return String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 
+function formatDisplayDate(value){
+  if(!value) return '';
+  const parts = String(value).split('-');
+  if(parts.length !== 3) return value;
+  return `${parts[0]}/${parts[1]}/${parts[2]}`;
+}
+function nativeTimePromptLabel(value){ return displayTime(value || nowTime()); }
+function promptForDate(current){
+  const next = window.prompt('أدخل التاريخ بصيغة YYYY/MM/DD', formatDisplayDate(current || todayISO()));
+  if(!next) return null;
+  const cleaned = next.trim().replaceAll('-', '/');
+  const m = cleaned.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if(!m){ alert('صيغة التاريخ غير صحيحة. استخدم YYYY/MM/DD'); return null; }
+  const y=m[1], mo=String(Number(m[2])).padStart(2,'0'), d=String(Number(m[3])).padStart(2,'0');
+  const iso=`${y}-${mo}-${d}`;
+  if(Number(mo)<1 || Number(mo)>12 || Number(d)<1 || Number(d)>31 || Number.isNaN(new Date(`${iso}T12:00:00`).getTime())){
+    alert('التاريخ غير صحيح'); return null;
+  }
+  return iso;
+}
+function promptForTime(current){
+  const next = window.prompt('أدخل الوقت بصيغة HH:MM AM أو HH:MM PM', nativeTimePromptLabel(current || nowTime()));
+  if(!next) return null;
+  const cleaned = next.trim().toUpperCase().replace(/\s+/g,' ');
+  const m = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+  if(!m){ alert('صيغة الوقت غير صحيحة. مثال: 10:42 PM'); return null; }
+  let h=Number(m[1]), mi=Number(m[2]);
+  if(h<1 || h>12 || mi<0 || mi>59){ alert('الوقت غير صحيح'); return null; }
+  if(m[3]==='PM' && h!==12) h+=12;
+  if(m[3]==='AM' && h===12) h=0;
+  return `${String(h).padStart(2,'0')}:${String(mi).padStart(2,'0')}`;
+}
+function refreshDateTimeDisplay(raw){
+  const display = raw?._displayInput;
+  if(!display) return;
+  if(raw.dataset.nativeType === 'date') display.value = formatDisplayDate(raw.value);
+  if(raw.dataset.nativeType === 'time') display.value = displayTime(raw.value);
+}
+function openNativePicker(raw){
+  const type = raw.dataset.nativeType;
+  const picker = document.createElement('input');
+  picker.type = type;
+  picker.value = raw.value || (type === 'date' ? todayISO() : nowTime());
+  picker.setAttribute('dir','ltr');
+  picker.setAttribute('lang','en-US');
+  picker.style.position='fixed';
+  picker.style.left='50%';
+  picker.style.top='50%';
+  picker.style.width='1px';
+  picker.style.height='1px';
+  picker.style.opacity='0.01';
+  picker.style.pointerEvents='none';
+  picker.style.zIndex='-1';
+  document.body.appendChild(picker);
+  const cleanupPicker=()=>setTimeout(()=>picker.remove(),250);
+  picker.addEventListener('change',()=>{
+    raw.value = picker.value;
+    refreshDateTimeDisplay(raw);
+    raw.dispatchEvent(new Event('change',{bubbles:true}));
+    cleanupPicker();
+  }, {once:true});
+  picker.addEventListener('blur', cleanupPicker, {once:true});
+  try{
+    picker.focus({preventScroll:true});
+    if(typeof picker.showPicker === 'function') picker.showPicker();
+    else picker.click();
+  }catch(e){
+    picker.remove();
+    const val = type === 'date' ? promptForDate(raw.value) : promptForTime(raw.value);
+    if(val){ raw.value = val; refreshDateTimeDisplay(raw); raw.dispatchEvent(new Event('change',{bubbles:true})); }
+  }
+}
 function prepareNativeDateTimeInputs(){
-  document.querySelectorAll('input[type="date"], input[type="time"]').forEach(el=>{
-    el.setAttribute('dir','ltr');
-    el.setAttribute('lang','en-US');
-    el.setAttribute('autocomplete','off');
+  document.querySelectorAll('input[type="date"], input[type="time"]').forEach(raw=>{
+    if(raw.dataset.enhancedPicker === '1') return;
+    const type = raw.type;
+    raw.dataset.nativeType = type;
+    raw.dataset.enhancedPicker = '1';
+    raw.type = 'hidden';
+    const display = document.createElement('input');
+    display.type = 'text';
+    display.readOnly = true;
+    display.inputMode = 'none';
+    display.className = `picker-display ${type}-display`;
+    display.setAttribute('dir','ltr');
+    display.setAttribute('lang','en-US');
+    display.setAttribute('aria-label', type === 'date' ? 'التاريخ' : 'الوقت');
+    display.placeholder = type === 'date' ? 'YYYY/MM/DD' : 'HH:MM AM';
+    raw.parentNode.insertBefore(display, raw);
+    raw._displayInput = display;
+    const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    if(originalDescriptor && !raw._valuePatched){
+      Object.defineProperty(raw, 'value', {
+        get(){ return originalDescriptor.get.call(raw); },
+        set(v){ originalDescriptor.set.call(raw, v); setTimeout(()=>refreshDateTimeDisplay(raw),0); }
+      });
+      raw._valuePatched = true;
+    }
+    display.addEventListener('click',()=>openNativePicker(raw));
+    display.addEventListener('keydown',(e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openNativePicker(raw); } });
+    raw.addEventListener('change',()=>refreshDateTimeDisplay(raw));
+    refreshDateTimeDisplay(raw);
   });
 }
 prepareNativeDateTimeInputs();
