@@ -22,9 +22,33 @@ enableIndexedDbPersistence(db).catch(()=>{});
 const provider = new GoogleAuthProvider();
 
 const $ = (id)=>document.getElementById(id);
-const state = { user:null, expenses:[], settings:{dailyLimit:0,weeklyLimit:0,monthlyBudget:0,currency:'SAR'}, unsub:[] };
+const state = { user:null, expenses:[], settings:{dailyLimit:0,weeklyLimit:0,monthlyBudget:0,currency:'SAR'}, unsub:[], quickDetail:null };
 const arDays = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
 const fmtNum = (n)=> Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2});
+function displayTime(time){
+  if(!time) return '';
+  const [hh='0', mm='00'] = String(time).split(':');
+  let h = Number(hh);
+  if(!Number.isFinite(h)) return time;
+  const suffix = h >= 12 ? 'م' : 'ص';
+  h = h % 12 || 12;
+  return `${h}:${String(mm).padStart(2,'0')} ${suffix}`;
+}
+function displayDateTime(e){
+  return `${e.date || ''} · ${displayTime(e.time)} · ${escapeHtml(e.dayName||'')}`;
+}
+function hourLabel(i){
+  const suffix = i >= 12 ? 'م' : 'ص';
+  const h = i % 12 || 12;
+  return `${h}${suffix}`;
+}
+function setSyncStatus(isOnline){
+  const el = $('syncStatus');
+  if(!el) return;
+  el.textContent = isOnline ? 'متصل بالسحابة' : 'غير متصل';
+  el.classList.toggle('online', !!isOnline);
+  el.classList.toggle('offline', !isOnline);
+}
 const money = (n)=> `${fmtNum(n)} ${state.settings.currency||'SAR'}`;
 const todayISO = ()=> new Date().toISOString().slice(0,10);
 const nowTime = ()=> new Date().toTimeString().slice(0,5);
@@ -119,7 +143,7 @@ async function bootAuth(){
     cleanup(); state.user=user;
     $('loginBtn').classList.toggle('hidden',!!user);
     $('logoutBtn').classList.toggle('hidden',!user);
-    $('syncStatus').textContent = user ? 'متصل بالسحابة' : 'غير متصل';
+    setSyncStatus(!!user);
     if(!user){ state.expenses=[]; renderAll(); return; }
     await setDoc(userBase(), {email:user.email, displayName:user.displayName||'', updatedAt:serverTimestamp()}, {merge:true});
     state.unsub.push(onSnapshot(settingsDoc(), snap=>{
@@ -144,6 +168,13 @@ function nav(view){
 document.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>nav(b.dataset.nav));
 document.querySelectorAll('[data-open-expense]').forEach(b=>b.onclick=()=>openExpense());
 document.querySelectorAll('[data-close-dialog]').forEach(b=>b.onclick=()=>$('expenseDialog').close());
+document.querySelectorAll('[data-quick-detail]').forEach(el=>{
+  el.addEventListener('click',()=>openQuickDetails(el.dataset.quickDetail));
+  el.addEventListener('keydown',(e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openQuickDetails(el.dataset.quickDetail); } });
+});
+document.querySelectorAll('[data-close-quick-details]').forEach(b=>b.onclick=()=>$('quickDetailsDialog').close());
+$('quickDetailsCsvBtn').onclick=()=>{ const d=getQuickDetailData(state.quickDetail||'all'); exportCSV(d.list, d.filename.replace('.pdf','.csv')); };
+$('quickDetailsPdfBtn').onclick=()=>{ const d=getQuickDetailData(state.quickDetail||'all'); printReport(d.title, d.list); };
 
 function openExpense(exp=null){
   if(!state.user){ toast('سجل الدخول أولاً'); return; }
@@ -211,7 +242,52 @@ $('deleteExpenseBtn').onclick = async()=>{
   await deleteDoc(doc(expensesCol(), id)); $('expenseDialog').close(); toast('تم حذف العملية');
 };
 
-function renderAll(){ renderHome(); renderLists(); renderFilters(); renderCharts(); }
+
+function getQuickDetailData(type){
+  const now=new Date();
+  const wr=weekRange(now), mr=monthRange(now);
+  let title='تفاصيل العمليات', list=[], chartTitle='الرسم البياني', filename='masroofi_details.pdf', group='date';
+  if(type==='today'){
+    title='عمليات اليوم'; list=state.expenses.filter(e=>e.date===todayISO()); chartTitle='مصروفات اليوم حسب الساعة'; filename='masroofi_today.pdf'; group='hour';
+  } else if(type==='week'){
+    title='عمليات الأسبوع'; list=state.expenses.filter(e=>inRange(e,wr.start,wr.end)); chartTitle='مصروفات الأسبوع من الأحد إلى السبت'; filename='masroofi_week.pdf'; group='week';
+  } else if(type==='month'){
+    title='عمليات الشهر'; list=state.expenses.filter(e=>inRange(e,mr.start,mr.end)); chartTitle='مصروفات الشهر حسب الأيام'; filename='masroofi_month.pdf'; group='month';
+  } else {
+    title='جميع العمليات'; list=[...state.expenses]; chartTitle='جميع العمليات حسب التاريخ'; filename='masroofi_all_transactions.pdf'; group='date';
+  }
+  return {type,title,list:sortExpenses(list),chartTitle,filename,group};
+}
+function groupByDate(list){
+  const map=new Map();
+  sortExpenses(list).slice().reverse().forEach(e=>{ map.set(e.date,(map.get(e.date)||0)+Number(e.amount||0)); });
+  const entries=[...map.entries()];
+  if(!entries.length) return {labels:['-'], vals:[0]};
+  const shown=entries.slice(-14);
+  return {labels:shown.map(x=>x[0].slice(5)), vals:shown.map(x=>x[1])};
+}
+function quickChartData(detail){
+  const now=new Date(); const wr=weekRange(now), mr=monthRange(now);
+  if(detail.group==='hour') return groupByHour(detail.list);
+  if(detail.group==='week') return groupByWeekDays(detail.list,wr);
+  if(detail.group==='month') return groupByMonthDays(detail.list,mr);
+  return groupByDate(detail.list);
+}
+function openQuickDetails(type){
+  if(!state.user){ toast('سجل الدخول أولاً'); return; }
+  state.quickDetail=type||'all';
+  const d=getQuickDetailData(state.quickDetail);
+  $('quickDetailsTitle').textContent=d.title;
+  $('quickDetailsChartTitle').textContent=d.chartTitle;
+  $('quickDetailsSum').textContent=money(sum(d.list));
+  $('quickDetailsCount').textContent=`${fmtNum(d.list.length)} عملية`;
+  $('quickDetailsList').innerHTML=d.list.length ? d.list.map(itemHtml).join('') : 'لا توجد عمليات.';
+  $('quickDetailsList').classList.toggle('empty', !d.list.length);
+  $('quickDetailsDialog').showModal();
+  setTimeout(()=>{ const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); bindItems(); }, 80);
+}
+
+function renderAll(){ renderHome(); renderLists(); renderFilters(); renderCharts(); if(state.quickDetail && $('quickDetailsDialog')?.open){ const d=getQuickDetailData(state.quickDetail); $('quickDetailsSum').textContent=money(sum(d.list)); $('quickDetailsCount').textContent=`${fmtNum(d.list.length)} عملية`; $('quickDetailsList').innerHTML=d.list.length ? d.list.map(itemHtml).join('') : 'لا توجد عمليات.'; const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); } }
 function renderHome(){
   const now = new Date(); const tkey=todayISO(); const wr=weekRange(now); const mr=monthRange(now);
   const today = state.expenses.filter(e=>e.date===tkey); const week=state.expenses.filter(e=>inRange(e,wr.start,wr.end)); const month=state.expenses.filter(e=>inRange(e,mr.start,mr.end));
@@ -222,7 +298,7 @@ function renderHome(){
   setCardStatus($('todayCard'),st,state.settings.dailyLimit); setCardStatus($('weekCard'),sw,state.settings.weeklyLimit); setCardStatus($('monthCard'),sm,budget);
 }
 function setCardStatus(el,total,limit){ el.classList.remove('ok','warn','bad','neutral'); if(!limit){el.classList.add('neutral'); return;} const r=total/limit; el.classList.add(r>1?'bad':r>=.5?'warn':'ok'); }
-function itemHtml(e){ return `<div class="item" data-id="${e.id}"><div><strong>${escapeHtml(e.category||'-')}</strong><div class="meta">${escapeHtml(e.beneficiary||'بدون مستفيد')} · ${escapeHtml(e.place||'بدون مكان')}</div><div class="meta">${e.date} · ${e.time||''} · ${escapeHtml(e.dayName||'')}</div></div><div class="amount">${money(e.amount)}</div></div>`; }
+function itemHtml(e){ return `<div class="item" data-id="${e.id}"><div><strong>${escapeHtml(e.category||'-')}</strong><div class="meta">${escapeHtml(e.beneficiary||'بدون مستفيد')} · ${escapeHtml(e.place||'بدون مكان')}</div><div class="meta">${displayDateTime(e)}</div></div><div class="amount">${money(e.amount)}</div></div>`; }
 function renderLists(){
   const recent = sortExpenses(state.expenses).slice(0,5);
   $('recentList').innerHTML = recent.length ? recent.map(itemHtml).join('') : 'لا توجد عمليات بعد.';
@@ -292,14 +368,14 @@ function svgLine(labels, values, title){
   return `<div class="chart-print"><h3>${escapeHtml(title)}</h3><svg viewBox="0 0 ${w} ${h}" width="100%" height="210" xmlns="http://www.w3.org/2000/svg"><rect width="${w}" height="${h}" rx="18" fill="#ffffff" stroke="#e2e8f0"/>${grids}<path d="${line}" fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${circles}${xlabels}</svg></div>`;
 }
 
-function groupByHour(list){ const labels=Array.from({length:24},(_,i)=>String(i).padStart(2,'0')); const vals=labels.map(()=>0); list.forEach(e=>{const h=Number((e.time||'00:00').slice(0,2)); vals[h]+=Number(e.amount||0);}); return {labels,vals}; }
+function groupByHour(list){ const labels=Array.from({length:24},(_,i)=>hourLabel(i)); const vals=labels.map(()=>0); list.forEach(e=>{const h=Number((e.time||'00:00').slice(0,2)); vals[h]+=Number(e.amount||0);}); return {labels,vals}; }
 function groupByWeekDays(list,wr){ const labels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']; const vals=labels.map(()=>0); list.forEach(e=>{ vals[toDateObj(e.date,e.time).getDay()]+=Number(e.amount||0); }); return {labels,vals}; }
 function groupByMonthDays(list,mr){ const days=new Date(mr.end).getDate(); const labels=Array.from({length:days},(_,i)=>String(i+1)); const vals=labels.map(()=>0); list.forEach(e=>{ vals[toDateObj(e.date,e.time).getDate()-1]+=Number(e.amount||0); }); return {labels,vals}; }
 function renderCharts(){ const now=new Date(), wr=weekRange(now), mr=monthRange(now); const today=state.expenses.filter(e=>e.date===todayISO()), week=state.expenses.filter(e=>inRange(e,wr.start,wr.end)), month=state.expenses.filter(e=>inRange(e,mr.start,mr.end)); let g=groupByHour(today); drawLine($('chartToday'),g.labels,g.vals); g=groupByWeekDays(week,wr); drawLine($('chartWeek'),g.labels,g.vals); g=groupByMonthDays(month,mr); drawLine($('chartMonth'),g.labels,g.vals); }
-window.addEventListener('resize', renderCharts);
+window.addEventListener('resize', ()=>{ renderCharts(); if(state.quickDetail && $('quickDetailsDialog')?.open){ const d=getQuickDetailData(state.quickDetail); const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); } });
 
 $('exportCsvBtn').onclick=()=> exportCSV(currentFiltered(),'masroofi_search.csv');
-function exportCSV(list, filename){ const rows=[['amount','category','beneficiary','place','date','time','day','notes'],...list.map(e=>[e.amount,e.category,e.beneficiary,e.place,e.date,e.time,e.dayName,e.notes])]; const csv=rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n'); downloadBlob(csv,filename,'text/csv;charset=utf-8'); }
+function exportCSV(list, filename){ const rows=[['amount','category','beneficiary','place','date','time','day','notes'],...list.map(e=>[e.amount,e.category,e.beneficiary,e.place,e.date,displayTime(e.time),e.dayName,e.notes])]; const csv=rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n'); downloadBlob(csv,filename,'text/csv;charset=utf-8'); }
 function downloadBlob(content,filename,type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type})); a.download=filename; a.click(); URL.revokeObjectURL(a.href); }
 $('backupJsonBtn').onclick=()=> downloadBlob(JSON.stringify({settings:state.settings, expenses:state.expenses},null,2),'masroofi_backup.json','application/json');
 $('restoreJsonInput').onchange=async(e)=>{ const file=e.target.files[0]; if(!file||!state.user)return; if(!confirmAction('سيتم استيراد العمليات إلى حسابك. هل تريد المتابعة؟'))return; const data=JSON.parse(await file.text()); const batch=writeBatch(db); if(data.settings) batch.set(settingsDoc(),data.settings,{merge:true}); (data.expenses||[]).forEach(x=>{const ref=doc(expensesCol()); const {id,...rest}=x; batch.set(ref,{...rest,updatedAt:serverTimestamp()});}); await batch.commit(); toast('تمت الاستعادة'); };
@@ -307,11 +383,11 @@ $('printSearchBtn').onclick=()=> printReport('تقرير البحث', currentFil
 document.querySelectorAll('[data-report]').forEach(btn=>btn.onclick=()=>{ const type=btn.dataset.report, now=new Date(); let title='', list=[]; if(type==='daily'){title='التقرير اليومي'; list=state.expenses.filter(e=>e.date===todayISO());} if(type==='weekly'){title='التقرير الأسبوعي'; const r=weekRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end));} if(type==='monthly'){title='التقرير الشهري'; const r=monthRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end));} printReport(title, sortExpenses(list)); });
 function printReport(title,list){
   const sorted=sortExpenses(list);
-  const rows=sorted.map(e=>`<tr><td>${e.date}</td><td>${e.time||''}</td><td>${escapeHtml(e.category||'')}</td><td>${escapeHtml(e.beneficiary||'')}</td><td>${escapeHtml(e.place||'')}</td><td>${money(e.amount)}</td></tr>`).join('');
+  const rows=sorted.map(e=>`<tr><td>${e.date}</td><td>${displayTime(e.time)}</td><td>${escapeHtml(e.category||'')}</td><td>${escapeHtml(e.beneficiary||'')}</td><td>${escapeHtml(e.place||'')}</td><td>${money(e.amount)}</td></tr>`).join('');
   const gDay=groupByHour(sorted); const gWeek=groupByWeekDays(sorted); const daysInMonth=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
   const monthLabels=Array.from({length:daysInMonth},(_,i)=>String(i+1)); const monthVals=monthLabels.map(()=>0); sorted.forEach(e=>{const ix=toDateObj(e.date,e.time).getDate()-1; if(ix>=0&&ix<monthVals.length) monthVals[ix]+=Number(e.amount||0);});
   const charts = svgLine(gDay.labels,gDay.vals,'رسم مصروفات حسب الساعة') + svgLine(gWeek.labels,gWeek.vals,'رسم مصروفات حسب أيام الأسبوع') + svgLine(monthLabels,monthVals,'رسم مصروفات حسب أيام الشهر');
-  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111;background:#fff}h1{margin:0 0 12px}.summary{display:flex;gap:12px;margin:16px 0;flex-wrap:wrap}.box{border:1px solid #ddd;border-radius:12px;padding:12px;background:#fafafa}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}.toolbar{display:flex;gap:10px;margin:16px 0;flex-wrap:wrap}.toolbar button{border:0;border-radius:12px;padding:10px 14px;font-weight:700;background:#0f766e;color:white}.toolbar button.secondary{background:#e6fffb;color:#0f766e}.charts{margin-top:22px;display:grid;gap:14px}.chart-print{page-break-inside:avoid;border:1px solid #e5e7eb;border-radius:14px;padding:10px}.chart-print h3{margin:0 0 8px}@media print{.toolbar{display:none}body{padding:0}.chart-print{break-inside:avoid}}</style></head><body><h1>${title}</h1><p>${new Date().toLocaleString('en-US')}</p><div class="toolbar"><button onclick="print()">طباعة / حفظ PDF</button><button class="secondary" onclick="window.close(); if(!window.closed){history.back();}">العودة للتطبيق</button></div><div class="summary"><div class="box">عدد العمليات: ${fmtNum(sorted.length)}</div><div class="box">الإجمالي: ${money(sum(sorted))}</div></div><table><thead><tr><th>التاريخ</th><th>الوقت</th><th>التصنيف</th><th>المستفيد</th><th>المكان</th><th>المبلغ</th></tr></thead><tbody>${rows||'<tr><td colspan="6">لا توجد عمليات</td></tr>'}</tbody></table><div class="charts">${charts}</div></body></html>`;
+  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111;background:#fff}h1{margin:0 0 12px}.summary{display:flex;gap:12px;margin:16px 0;flex-wrap:wrap}.box{border:1px solid #ddd;border-radius:12px;padding:12px;background:#fafafa}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f3f4f6}.toolbar{display:flex;gap:10px;margin:16px 0;flex-wrap:wrap}.toolbar button{border:0;border-radius:12px;padding:10px 14px;font-weight:700;background:#0f766e;color:white}.toolbar button.secondary{background:#e6fffb;color:#0f766e}.charts{margin-top:22px;display:grid;gap:14px}.chart-print{page-break-inside:avoid;border:1px solid #e5e7eb;border-radius:14px;padding:10px}.chart-print h3{margin:0 0 8px}@media print{.toolbar{display:none}body{padding:0}.chart-print{break-inside:avoid}}</style></head><body><h1>${title}</h1><p>${new Date().toLocaleString('en-US',{hour12:true})}</p><div class="toolbar"><button onclick="print()">طباعة / حفظ PDF</button><button class="secondary" onclick="window.close(); if(!window.closed){history.back();}">العودة للتطبيق</button></div><div class="summary"><div class="box">عدد العمليات: ${fmtNum(sorted.length)}</div><div class="box">الإجمالي: ${money(sum(sorted))}</div></div><table><thead><tr><th>التاريخ</th><th>الوقت</th><th>التصنيف</th><th>المستفيد</th><th>المكان</th><th>المبلغ</th></tr></thead><tbody>${rows||'<tr><td colspan="6">لا توجد عمليات</td></tr>'}</tbody></table><div class="charts">${charts}</div></body></html>`;
   const w=window.open('','_blank');
   if(!w){ alert('لم يتم فتح التقرير. اسمح بالنوافذ المنبثقة ثم حاول مرة أخرى.'); return; }
   w.document.write(html); w.document.close();

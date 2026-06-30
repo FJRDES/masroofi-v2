@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=2.1.1" />
+  <link rel="stylesheet" href="style.css?v=2.2.0" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -39,16 +39,16 @@
         </div>
 
         <div class="cards-grid">
-          <article class="stat-card" id="todayCard">
+          <article class="stat-card clickable" id="todayCard" data-quick-detail="today" role="button" tabindex="0" aria-label="عرض عمليات اليوم">
             <span>مصروف اليوم</span><strong id="todayTotal">0 SAR</strong><small id="todayLimitText">الحد: 0</small>
           </article>
-          <article class="stat-card" id="weekCard">
+          <article class="stat-card clickable" id="weekCard" data-quick-detail="week" role="button" tabindex="0" aria-label="عرض عمليات الأسبوع">
             <span>مصروف الأسبوع</span><strong id="weekTotal">0 SAR</strong><small id="weekLimitText">الأحد إلى السبت</small>
           </article>
-          <article class="stat-card" id="monthCard">
+          <article class="stat-card clickable" id="monthCard" data-quick-detail="month" role="button" tabindex="0" aria-label="عرض عمليات الشهر">
             <span>مصروف الشهر</span><strong id="monthTotal">0 SAR</strong><small id="monthLimitText">الحد: 0</small>
           </article>
-          <article class="stat-card neutral">
+          <article class="stat-card neutral clickable" data-quick-detail="all" role="button" tabindex="0" aria-label="عرض جميع العمليات">
             <span>عدد العمليات</span><strong id="countTotal">0</strong><small>كل العمليات المسجلة</small>
           </article>
         </div>
@@ -127,6 +127,10 @@
             <label class="btn secondary file-btn">استعادة JSON<input id="restoreJsonInput" type="file" accept="application/json" hidden /></label>
           </div>
         </section>
+        <section class="panel version-panel">
+          <h2>معلومات التطبيق</h2>
+          <p class="muted">الإصدار الحالي: <strong>Masroofi V2.2</strong></p>
+        </section>
         <button class="btn ghost full" data-nav="home">رجوع للرئيسية</button>
       </section>
     </main>
@@ -162,7 +166,35 @@
     </form>
   </dialog>
 
+
+
+  <dialog id="quickDetailsDialog" class="modal detail-modal">
+    <div class="detail-shell">
+      <div class="modal-head">
+        <h2 id="quickDetailsTitle">تفاصيل العمليات</h2>
+        <button type="button" class="icon-btn" data-close-quick-details aria-label="إغلاق">×</button>
+      </div>
+      <div class="detail-summary">
+        <div><span>الإجمالي</span><strong id="quickDetailsSum">0 SAR</strong></div>
+        <div><span>عدد العمليات</span><strong id="quickDetailsCount">0</strong></div>
+      </div>
+      <div class="chart-card detail-chart-card">
+        <h3 id="quickDetailsChartTitle">الرسم البياني</h3>
+        <canvas id="quickDetailsChart" height="145"></canvas>
+      </div>
+      <div class="actions-row detail-actions">
+        <button id="quickDetailsPdfBtn" type="button" class="btn secondary">PDF / طباعة</button>
+        <button id="quickDetailsCsvBtn" type="button" class="btn secondary">Excel/CSV</button>
+      </div>
+      <div id="quickDetailsList" class="list empty">لا توجد عمليات.</div>
+      <div class="modal-actions sticky-actions">
+        <button type="button" class="btn ghost" data-close-quick-details>إلغاء</button>
+        <button type="button" class="btn primary" data-close-quick-details>العودة للتطبيق</button>
+      </div>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast"></div>
-  <script type="module" src="app.js?v=2.1.1"></script>
+  <script type="module" src="app.js?v=2.2.0"></script>
 </body>
 </html>
