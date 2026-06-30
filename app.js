@@ -1,5 +1,5 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js';
+import { initializeAuth, browserLocalPersistence, browserPopupRedirectResolver, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js';
 import { getFirestore, doc, collection, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, enableIndexedDbPersistence, writeBatch } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -13,7 +13,10 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+const auth = initializeAuth(app, {
+  persistence: browserLocalPersistence,
+  popupRedirectResolver: browserPopupRedirectResolver
+});
 const db = getFirestore(app);
 enableIndexedDbPersistence(db).catch(()=>{});
 const provider = new GoogleAuthProvider();
@@ -48,9 +51,20 @@ function settingsDoc(){ return doc(db,'users',state.user.uid,'settings','main');
 function cleanup(){ state.unsub.forEach(u=>u&&u()); state.unsub=[]; }
 
 // إعداد تسجيل الدخول بحساب Google
-// نستخدم Redirect بدل Popup لأنه يعمل بشكل أفضل على Safari والآيفون.
+// هذه النسخة تستخدم Popup أولاً لأنها أوضح على Safari عند ظهور Allow،
+// ثم تستخدم Redirect كخطة بديلة إذا منع المتصفح النافذة.
+auth.languageCode = 'ar';
+provider.addScope('email');
+provider.addScope('profile');
 provider.setCustomParameters({
   prompt: 'select_account'
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled promise rejection:', event.reason);
+});
+window.addEventListener('error', (event) => {
+  console.error('JavaScript error:', event.message, event.error);
 });
 
 getRedirectResult(auth)
@@ -59,15 +73,29 @@ getRedirectResult(auth)
   })
   .catch((e) => {
     console.error('Firebase redirect sign-in error:', e);
-    alert('خطأ في تسجيل الدخول: ' + (e?.message || e));
+    alert('خطأ في نتيجة تسجيل الدخول: ' + (e?.code || '') + ' - ' + (e?.message || e));
   });
 
 $('loginBtn').onclick = async () => {
   try {
-    await signInWithRedirect(auth, provider);
-  } catch (e) {
-    console.error('Firebase sign-in redirect error:', e);
-    alert('تعذر فتح تسجيل الدخول: ' + (e?.message || e));
+    toast('جار فتح تسجيل الدخول...');
+    await signInWithPopup(auth, provider);
+  } catch (popupError) {
+    console.error('Firebase sign-in popup error:', popupError);
+    const code = popupError?.code || '';
+
+    // إذا منع Safari النافذة أو أغلقها المستخدم، نستخدم التحويل الكامل للصفحة.
+    if (code.includes('popup') || code.includes('cancelled') || code.includes('blocked') || code.includes('closed')) {
+      try {
+        toast('سيتم تحويلك إلى صفحة Google لتسجيل الدخول...');
+        await signInWithRedirect(auth, provider);
+      } catch (redirectError) {
+        console.error('Firebase sign-in redirect error:', redirectError);
+        alert('تعذر تسجيل الدخول: ' + (redirectError?.code || '') + ' - ' + (redirectError?.message || redirectError));
+      }
+    } else {
+      alert('تعذر تسجيل الدخول: ' + code + ' - ' + (popupError?.message || popupError));
+    }
   }
 };
 $('logoutBtn').onclick = async()=>{ if(confirmAction('هل تريد تسجيل الخروج؟')) await signOut(auth); };
