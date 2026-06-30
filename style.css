@@ -100,3 +100,88 @@ input[type="time"]::-webkit-datetime-edit{
 .modal .form-grid textarea{
   border-radius:18px;
 }
+
+/* Masroofi V2.5 final iPhone picker/focus fixes */
+.form-grid input:focus,
+.form-grid textarea:focus,
+.picker-display:focus{
+  border-color:#93c5fd !important;
+  box-shadow:none !important;
+  outline:none !important;
+}
+.picker-display{
+  box-sizing:border-box;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:13px 14px;
+  background:#fff;
+  color:var(--text);
+  text-align:center;
+  direction:ltr;
+  font-variant-numeric:tabular-nums;
+  cursor:pointer;
+  -webkit-appearance:none;
+  appearance:none;
+}
+.picker-display[readonly]{
+  opacity:1;
+  -webkit-text-fill-color:var(--text);
+}
+
+/* Masroofi V2.6: reliable iPhone date/time picker and single focus border */
+.picker-wrap{
+  position:relative;
+  display:block;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+}
+.picker-wrap .picker-display{
+  display:block;
+  width:100%;
+  height:52px;
+  line-height:1.25;
+  border:1px solid var(--line) !important;
+  border-radius:18px !important;
+  padding:13px 14px !important;
+  box-shadow:none !important;
+  outline:none !important;
+  background:#fff !important;
+  text-align:center !important;
+  direction:ltr !important;
+  font-variant-numeric:tabular-nums;
+  -webkit-appearance:none !important;
+  appearance:none !important;
+}
+.picker-wrap .native-picker-input{
+  position:absolute !important;
+  inset:0 !important;
+  width:100% !important;
+  height:100% !important;
+  opacity:0 !important;
+  z-index:2 !important;
+  cursor:pointer !important;
+  border:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  pointer-events:auto !important;
+  -webkit-appearance:auto !important;
+  appearance:auto !important;
+}
+.form-grid input:focus,
+.form-grid textarea:focus,
+.modal input:focus,
+.modal textarea:focus,
+.picker-display:focus{
+  border-color:#93c5fd !important;
+  box-shadow:none !important;
+  outline:none !important;
+}
+.form-grid input,
+.form-grid textarea,
+.picker-display{
+  box-shadow:none !important;
+}

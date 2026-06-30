@@ -487,7 +487,12 @@ function prepareNativeDateTimeInputs(){
     const type = raw.type;
     raw.dataset.nativeType = type;
     raw.dataset.enhancedPicker = '1';
-    raw.type = 'hidden';
+
+    const wrap = document.createElement('span');
+    wrap.className = 'picker-wrap';
+    raw.parentNode.insertBefore(wrap, raw);
+    wrap.appendChild(raw);
+
     const display = document.createElement('input');
     display.type = 'text';
     display.readOnly = true;
@@ -497,8 +502,15 @@ function prepareNativeDateTimeInputs(){
     display.setAttribute('lang','en-US');
     display.setAttribute('aria-label', type === 'date' ? 'التاريخ' : 'الوقت');
     display.placeholder = type === 'date' ? 'YYYY/MM/DD' : 'HH:MM AM';
-    raw.parentNode.insertBefore(display, raw);
+    wrap.insertBefore(display, raw);
+
+    raw.className = `${raw.className || ''} native-picker-input`.trim();
+    raw.setAttribute('dir','ltr');
+    raw.setAttribute('lang','en-US');
+    raw.setAttribute('aria-label', type === 'date' ? 'اختر التاريخ' : 'اختر الوقت');
+    raw.tabIndex = -1;
     raw._displayInput = display;
+
     const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
     if(originalDescriptor && !raw._valuePatched){
       Object.defineProperty(raw, 'value', {
@@ -507,9 +519,21 @@ function prepareNativeDateTimeInputs(){
       });
       raw._valuePatched = true;
     }
-    display.addEventListener('click',()=>openNativePicker(raw));
-    display.addEventListener('keydown',(e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openNativePicker(raw); } });
+
+    const openPicker = ()=>{
+      try{
+        raw.focus({preventScroll:true});
+        if(typeof raw.showPicker === 'function') raw.showPicker();
+        else raw.click();
+      }catch(e){
+        const val = type === 'date' ? promptForDate(raw.value) : promptForTime(raw.value);
+        if(val){ raw.value = val; refreshDateTimeDisplay(raw); raw.dispatchEvent(new Event('change',{bubbles:true})); }
+      }
+    };
+    display.addEventListener('click', openPicker);
+    display.addEventListener('keydown',(e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openPicker(); } });
     raw.addEventListener('change',()=>refreshDateTimeDisplay(raw));
+    raw.addEventListener('input',()=>refreshDateTimeDisplay(raw));
     refreshDateTimeDisplay(raw);
   });
 }
