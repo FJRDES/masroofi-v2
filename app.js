@@ -47,10 +47,28 @@ function expensesCol(){ return collection(db,'users',state.user.uid,'expenses');
 function settingsDoc(){ return doc(db,'users',state.user.uid,'settings','main'); }
 function cleanup(){ state.unsub.forEach(u=>u&&u()); state.unsub=[]; }
 
-getRedirectResult(auth).catch(()=>{});
-$('loginBtn').onclick = async()=>{
-  try { await signInWithPopup(auth, provider); }
-  catch(e){ await signInWithRedirect(auth, provider); }
+// إعداد تسجيل الدخول بحساب Google
+// نستخدم Redirect بدل Popup لأنه يعمل بشكل أفضل على Safari والآيفون.
+provider.setCustomParameters({
+  prompt: 'select_account'
+});
+
+getRedirectResult(auth)
+  .then((result) => {
+    if (result?.user) toast('تم تسجيل الدخول بنجاح');
+  })
+  .catch((e) => {
+    console.error('Firebase redirect sign-in error:', e);
+    alert('خطأ في تسجيل الدخول: ' + (e?.message || e));
+  });
+
+$('loginBtn').onclick = async () => {
+  try {
+    await signInWithRedirect(auth, provider);
+  } catch (e) {
+    console.error('Firebase sign-in redirect error:', e);
+    alert('تعذر فتح تسجيل الدخول: ' + (e?.message || e));
+  }
 };
 $('logoutBtn').onclick = async()=>{ if(confirmAction('هل تريد تسجيل الخروج؟')) await signOut(auth); };
 
