@@ -50,40 +50,13 @@ function setSyncStatus(isOnline){
   el.classList.toggle('offline', !isOnline);
 }
 const money = (n)=> `${fmtNum(n)} ${state.settings.currency||'SAR'}`;
-function localISODate(d=new Date()){
-  const y=d.getFullYear();
-  const m=String(d.getMonth()+1).padStart(2,'0');
-  const day=String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
-}
-function normalizeDateInput(value){
-  if(!value) return '';
-  const s = String(value).trim().replaceAll('/', '-');
-  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if(!m) return '';
-  const y=m[1], mo=String(Number(m[2])).padStart(2,'0'), d=String(Number(m[3])).padStart(2,'0');
-  const iso = `${y}-${mo}-${d}`;
-  const test = new Date(`${iso}T12:00:00`);
-  if(Number.isNaN(test.getTime()) || localISODate(test) !== iso) return '';
-  return iso;
-}
-const todayISO = ()=> localISODate(new Date());
+const todayISO = ()=> new Date().toISOString().slice(0,10);
 const nowTime = ()=> new Date().toTimeString().slice(0,5);
-const toDateObj = (date,time='00:00') => {
-  const iso = normalizeDateInput(date);
-  if(!iso) return new Date(NaN);
-  return new Date(`${iso}T${time || '00:00'}:00`);
-};
-const dateKey = (d)=> localISODate(d);
-function expenseDateObj(exp){
-  const dt = toDateObj(exp?.date, exp?.time);
-  if(!Number.isNaN(dt.getTime())) return dt;
-  const fb = exp?.dateTime ? new Date(exp.dateTime) : new Date(NaN);
-  return fb;
-}
+const toDateObj = (date,time='00:00') => new Date(`${date}T${time || '00:00'}:00`);
+const dateKey = (d)=> d.toISOString().slice(0,10);
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
 function confirmAction(msg){ return window.confirm(msg); }
-function dayNameFromDate(date){ const d = toDateObj(date,'12:00'); return Number.isNaN(d.getTime()) ? '' : arDays[d.getDay()]; }
+function dayNameFromDate(date){ const d = toDateObj(date,'12:00'); return arDays[d.getDay()]; }
 function weekRange(d=new Date()){
   const x = new Date(d); x.setHours(0,0,0,0);
   const start = new Date(x); start.setDate(x.getDate()-x.getDay());
@@ -93,9 +66,9 @@ function weekRange(d=new Date()){
 function monthRange(d=new Date()){
   return {start:new Date(d.getFullYear(),d.getMonth(),1), end:new Date(d.getFullYear(),d.getMonth()+1,0,23,59,59,999)};
 }
-function inRange(exp,start,end){ const dt = expenseDateObj(exp); return !Number.isNaN(dt.getTime()) && dt>=start && dt<=end; }
+function inRange(exp,start,end){ const dt = toDateObj(exp.date, exp.time); return dt>=start && dt<=end; }
 function sum(list){ return list.reduce((a,b)=>a+Number(b.amount||0),0); }
-function sortExpenses(list){ return [...list].sort((a,b)=> expenseDateObj(b)-expenseDateObj(a)); }
+function sortExpenses(list){ return [...list].sort((a,b)=> toDateObj(b.date,b.time)-toDateObj(a.date,a.time)); }
 function userBase(){ return doc(db,'users',state.user.uid); }
 function expensesCol(){ return collection(db,'users',state.user.uid,'expenses'); }
 function settingsDoc(){ return doc(db,'users',state.user.uid,'settings','main'); }
@@ -207,7 +180,7 @@ function openExpense(exp=null){
   if(!state.user){ toast('سجل الدخول أولاً'); return; }
   $('expenseForm').reset(); $('expenseId').value=''; $('deleteExpenseBtn').classList.add('hidden');
   $('expenseDialogTitle').textContent = exp ? 'تعديل العملية' : 'إضافة مصروف';
-  const d = normalizeDateInput(exp?.date) || todayISO();
+  const d = exp?.date || todayISO();
   $('amount').value = exp?.amount ?? '';
   $('category').value = exp?.category || '';
   $('beneficiary').value = exp?.beneficiary || '';
@@ -242,7 +215,7 @@ $('expenseForm').addEventListener('submit', async(e)=>{
   const payload = {
     amount,
     category:$('category').value.trim(), beneficiary:$('beneficiary').value.trim(), place:$('place').value.trim(), notes:$('notes').value.trim(),
-    date:normalizeDateInput($('date').value), time:$('time').value, dayName:$('dayName').value.trim() || dayNameFromDate($('date').value),
+    date:$('date').value, time:$('time').value, dayName:$('dayName').value.trim() || dayNameFromDate($('date').value),
     dateTime: toDateObj($('date').value,$('time').value).toISOString(), updatedAt:serverTimestamp()
   };
   if(!payload.amount || !payload.category || !payload.beneficiary || !payload.place || !payload.date || !payload.time){ alert('أكمل جميع الحقول المطلوبة قبل الحفظ. الملاحظات فقط اختيارية.'); return; }
@@ -314,101 +287,15 @@ function openQuickDetails(type){
   setTimeout(()=>{ const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); bindItems(); }, 80);
 }
 
-
-function setText(id,value){ const el=$(id); if(el) el.textContent=value; }
-function setSmartClass(id,cls){ const el=$(id); if(!el) return; el.classList.remove('good','warn','bad'); if(cls) el.classList.add(cls); }
-function topBy(list, field){
-  const map = new Map();
-  list.forEach(e=>{
-    const label = String(e[field]||'').trim();
-    if(!label) return;
-    const current = map.get(label) || {label,total:0,count:0};
-    current.total += Number(e.amount||0);
-    current.count += 1;
-    map.set(label,current);
-  });
-  return [...map.values()].sort((a,b)=>b.total-a.total)[0] || null;
-}
-function samePeriodPreviousMonth(now=new Date()){
-  const y=now.getFullYear(), m=now.getMonth(), day=now.getDate();
-  const start = new Date(y,m-1,1,0,0,0,0);
-  const lastDay = new Date(y,m,0).getDate();
-  const endDay = Math.min(day,lastDay);
-  const end = new Date(y,m-1,endDay,23,59,59,999);
-  return {start,end};
-}
-function renderTopMetric(prefix, data){
-  setText(prefix+'Name', data ? data.label : 'لا يوجد');
-  setText(prefix+'Amount', data ? `${money(data.total)} · ${fmtNum(data.count)} عملية` : money(0));
-}
-function renderSmartDashboard(monthList, monthTotal, budget){
-  const now = new Date();
-  const daysElapsed = Math.max(1, now.getDate());
-  const avgDaily = monthTotal / daysElapsed;
-  const topCategory = topBy(monthList,'category');
-  const topBeneficiary = topBy(monthList,'beneficiary');
-  const topPlace = topBy(monthList,'place');
-  renderTopMetric('topCategory', topCategory);
-  renderTopMetric('topBeneficiary', topBeneficiary);
-  renderTopMetric('topPlace', topPlace);
-  setText('avgDailySpend', money(avgDaily));
-  const prevRange = samePeriodPreviousMonth(now);
-  const prevList = state.expenses.filter(e=>inRange(e, prevRange.start, prevRange.end));
-  const prevTotal = sum(prevList);
-  const diff = monthTotal - prevTotal;
-  const pct = prevTotal > 0 ? (diff / prevTotal) * 100 : null;
-  const compareEl = $('monthCompareText');
-  const compareAmountEl = $('monthCompareAmount');
-  if(prevTotal > 0){
-    const sign = diff > 0 ? '+' : '';
-    compareEl.textContent = `${sign}${fmtNum(pct)}%`;
-    compareEl.className = diff > 0 ? 'delta-up' : diff < 0 ? 'delta-down' : 'delta-neutral';
-    compareAmountEl.textContent = `${diff >= 0 ? 'زيادة' : 'انخفاض'} ${money(Math.abs(diff))}`;
-  } else {
-    compareEl.textContent = 'لا توجد بيانات كافية';
-    compareEl.className = 'delta-neutral';
-    compareAmountEl.textContent = 'أضف بيانات للشهر السابق للمقارنة';
-  }
-  const remaining = Number(budget||0) - monthTotal;
-  const forecastCard = $('budgetForecastText')?.closest('.smart-card');
-  if(forecastCard) forecastCard.classList.remove('good','warn','bad');
-  if(!budget){
-    setText('budgetForecastText','اضبط الميزانية');
-    setText('budgetForecastSub','أضف الميزانية الشهرية من الإعدادات');
-  } else if(remaining <= 0){
-    setText('budgetForecastText','تم تجاوز الميزانية');
-    setText('budgetForecastSub',`التجاوز الحالي: ${money(Math.abs(remaining))}`);
-    forecastCard?.classList.add('bad');
-  } else if(avgDaily <= 0){
-    setText('budgetForecastText','الميزانية آمنة');
-    setText('budgetForecastSub','لا توجد مصروفات كافية للتوقع');
-    forecastCard?.classList.add('good');
-  } else {
-    const daysLeftBySpend = Math.floor(remaining / avgDaily);
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
-    const calendarDaysLeft = Math.max(0, daysInMonth - now.getDate());
-    if(daysLeftBySpend <= calendarDaysLeft){
-      setText('budgetForecastText',`قد تنفد بعد ${fmtNum(daysLeftBySpend)} يوم`);
-      setText('budgetForecastSub',`المتبقي: ${money(remaining)}`);
-      forecastCard?.classList.add(daysLeftBySpend <= 3 ? 'bad' : 'warn');
-    } else {
-      setText('budgetForecastText','متوقع أن تكفي لنهاية الشهر');
-      setText('budgetForecastSub',`المتبقي: ${money(remaining)}`);
-      forecastCard?.classList.add('good');
-    }
-  }
-}
-
 function renderAll(){ renderHome(); renderLists(); renderFilters(); renderCharts(); if(state.quickDetail && $('quickDetailsDialog')?.open){ const d=getQuickDetailData(state.quickDetail); $('quickDetailsSum').textContent=money(sum(d.list)); $('quickDetailsCount').textContent=`${fmtNum(d.list.length)} عملية`; $('quickDetailsList').innerHTML=d.list.length ? d.list.map(itemHtml).join('') : 'لا توجد عمليات.'; const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); } }
 function renderHome(){
   const now = new Date(); const tkey=todayISO(); const wr=weekRange(now); const mr=monthRange(now);
-  const today = state.expenses.filter(e=>normalizeDateInput(e.date)===tkey); const week=state.expenses.filter(e=>inRange(e,wr.start,wr.end)); const month=state.expenses.filter(e=>inRange(e,mr.start,mr.end));
+  const today = state.expenses.filter(e=>e.date===tkey); const week=state.expenses.filter(e=>inRange(e,wr.start,wr.end)); const month=state.expenses.filter(e=>inRange(e,mr.start,mr.end));
   const st=sum(today), sw=sum(week), sm=sum(month); const budget = Number(state.settings.monthlyBudget||0); const remaining = budget - sm;
   $('todayTotal').textContent=money(st); $('weekTotal').textContent=money(sw); $('monthTotal').textContent=money(sm); $('countTotal').textContent=fmtNum(state.expenses.length); $('budgetRemaining').textContent=money(remaining);
   $('budgetNote').textContent = budget ? `المستخدم من الميزانية: ${money(sm)}` : 'اضبط الميزانية من الإعدادات';
   $('todayLimitText').textContent=`الحد اليومي: ${money(state.settings.dailyLimit)}`; $('weekLimitText').textContent=`الحد الأسبوعي: ${money(state.settings.weeklyLimit)}`; $('monthLimitText').textContent=`الميزانية: ${money(budget)}`;
   setCardStatus($('todayCard'),st,state.settings.dailyLimit); setCardStatus($('weekCard'),sw,state.settings.weeklyLimit); setCardStatus($('monthCard'),sm,budget);
-  renderSmartDashboard(month, sm, budget);
 }
 function setCardStatus(el,total,limit){ el.classList.remove('ok','warn','bad','neutral'); if(!limit){el.classList.add('neutral'); return;} const r=total/limit; el.classList.add(r>1?'bad':r>=.5?'warn':'ok'); }
 function itemHtml(e){ return `<div class="item" data-id="${e.id}"><div><strong>${escapeHtml(e.category||'-')}</strong><div class="meta">${escapeHtml(e.beneficiary||'بدون مستفيد')} · ${escapeHtml(e.place||'بدون مكان')}</div><div class="meta">${displayDateTime(e)}</div></div><div class="amount">${money(e.amount)}</div></div>`; }
@@ -523,9 +410,10 @@ function escapeHtml(s){ return String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;'
 
 
 function formatDisplayDate(value){
-  const iso = normalizeDateInput(value);
-  if(!iso) return '';
-  return iso.replaceAll('-', '/');
+  if(!value) return '';
+  const parts = String(value).split('-');
+  if(parts.length !== 3) return value;
+  return `${parts[0]}/${parts[1]}/${parts[2]}`;
 }
 function nativeTimePromptLabel(value){ return displayTime(value || nowTime()); }
 function promptForDate(current){
@@ -539,7 +427,7 @@ function promptForDate(current){
   if(Number(mo)<1 || Number(mo)>12 || Number(d)<1 || Number(d)>31 || Number.isNaN(new Date(`${iso}T12:00:00`).getTime())){
     alert('التاريخ غير صحيح'); return null;
   }
-  return normalizeDateInput(iso);
+  return iso;
 }
 function promptForTime(current){
   const next = window.prompt('أدخل الوقت بصيغة HH:MM AM أو HH:MM PM', nativeTimePromptLabel(current || nowTime()));
@@ -563,7 +451,7 @@ function openNativePicker(raw){
   const type = raw.dataset.nativeType;
   const picker = document.createElement('input');
   picker.type = type;
-  picker.value = type === 'date' ? (normalizeDateInput(raw.value) || todayISO()) : (raw.value || nowTime());
+  picker.value = raw.value || (type === 'date' ? todayISO() : nowTime());
   picker.setAttribute('dir','ltr');
   picker.setAttribute('lang','en-US');
   picker.style.position='fixed';
@@ -634,7 +522,6 @@ function prepareNativeDateTimeInputs(){
 
     const openPicker = ()=>{
       try{
-        if(type === 'date') raw.value = normalizeDateInput(raw.value) || todayISO();
         raw.focus({preventScroll:true});
         if(typeof raw.showPicker === 'function') raw.showPicker();
         else raw.click();
