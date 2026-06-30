@@ -35,7 +35,13 @@ function displayTime(time){
   return `${h}:${String(mm).padStart(2,'0')} ${suffix}`;
 }
 function displayDateTime(e){
-  return `${e.date || ''} · ${displayTime(e.time)} · ${escapeHtml(e.dayName||'')}`;
+  return `${formatDisplayDate(normalizeDateValue(e.date)) || ''} · ${displayTime(e.time)} · ${escapeHtml(e.dayName||'')}`;
+}
+function displayDateRange(start,end){
+  return `${formatDisplayDate(localISODate(start))} - ${formatDisplayDate(localISODate(end))}`;
+}
+function displayMonthLabel(d=new Date()){
+  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 function hourLabel(i){
   const suffix = i >= 12 ? 'PM' : 'AM';
@@ -316,7 +322,10 @@ function renderHome(){
   const st=sum(today), sw=sum(week), sm=sum(month); const budget = Number(state.settings.monthlyBudget||0); const remaining = budget - sm;
   $('todayTotal').textContent=money(st); $('weekTotal').textContent=money(sw); $('monthTotal').textContent=money(sm); $('countTotal').textContent=fmtNum(state.expenses.length); $('budgetRemaining').textContent=money(remaining);
   $('budgetNote').textContent = budget ? `المستخدم من الميزانية: ${money(sm)}` : 'اضبط الميزانية من الإعدادات';
-  $('todayLimitText').textContent=`الحد اليومي: ${money(state.settings.dailyLimit)}`; $('weekLimitText').textContent=`الحد الأسبوعي: ${money(state.settings.weeklyLimit)}`; $('monthLimitText').textContent=`الميزانية: ${money(budget)}`;
+  $('todayLimitText').textContent=`الحد اليومي: ${money(state.settings.dailyLimit)} · ${formatDisplayDate(tkey)}`;
+  $('weekLimitText').textContent=`الحد الأسبوعي: ${money(state.settings.weeklyLimit)} · ${displayDateRange(wr.start, wr.end)}`;
+  $('monthLimitText').textContent=`الميزانية: ${money(budget)} · شهر ${displayMonthLabel(now)}`;
+  if(budget) $('budgetNote').textContent = `المستخدم من الميزانية: ${money(sm)} · شهر ${displayMonthLabel(now)}`;
   setCardStatus($('todayCard'),st,state.settings.dailyLimit); setCardStatus($('weekCard'),sw,state.settings.weeklyLimit); setCardStatus($('monthCard'),sm,budget);
 }
 function setCardStatus(el,total,limit){ el.classList.remove('ok','warn','bad','neutral'); if(!limit){el.classList.add('neutral'); return;} const r=total/limit; el.classList.add(r>1?'bad':r>=.5?'warn':'ok'); }

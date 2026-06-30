@@ -1,12 +1,5 @@
-# Masroofi V2.7 - Dashboard Date Calculation Fix
+# Masroofi V2.8
 
-هذا التحديث يثبت حسابات الشاشة الرئيسية بناءً على التاريخ المحلي للجهاز بدل UTC، ويصلح احتساب:
-
-- مصروف اليوم
-- مصروف الأسبوع من الأحد إلى السبت
-- مصروف الشهر الحالي
-- المستخدم من الميزانية
-- المتبقي من الميزانية
-- الرسوم البيانية والتقارير المرتبطة بالفترات
-
-يراعي التحديث أيضًا أي تواريخ قديمة محفوظة بصيغة `YYYY/MM/DD` أو `YYYY-MM-DD`.
+- Dashboard date-period clarity.
+- Keeps stable V2.7 calculations.
+- Shows current day, week range, and month label next to limits/budget.
