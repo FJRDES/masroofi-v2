@@ -49,3 +49,54 @@ input[type="date"]::-webkit-date-and-time-value, input[type="time"]::-webkit-dat
   .detail-actions .btn{width:100%;flex:auto}
   .stat-card.clickable::after{font-size:11px;padding:4px 8px}
 }
+
+/* Masroofi V2.3 iPhone field/date fixes */
+.form-grid input,
+.form-grid textarea{
+  outline-offset: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+.form-grid input:focus,
+.form-grid textarea:focus{
+  border-color:#93c5fd;
+  box-shadow:0 0 0 4px rgba(147,197,253,.38), inset 0 0 0 1px #93c5fd;
+  outline:none;
+}
+input[type="date"],
+input[type="time"]{
+  direction:ltr !important;
+  unicode-bidi:isolate !important;
+  text-align:center !important;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:.2px;
+  min-height:48px;
+  padding-inline:14px !important;
+  overflow:hidden;
+  color:var(--text);
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value{
+  direction:ltr !important;
+  unicode-bidi:embed !important;
+  text-align:center !important;
+  display:block;
+  width:100%;
+  min-height:1.45em;
+  line-height:1.45;
+}
+input[type="date"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit{
+  direction:ltr !important;
+  unicode-bidi:embed !important;
+}
+.filters .form-grid input[type="date"]{
+  width:100%;
+  max-width:100%;
+}
+.modal .form-grid input,
+.modal .form-grid textarea{
+  border-radius:18px;
+}

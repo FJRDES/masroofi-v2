@@ -7,11 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="مصروفي" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <title>مصروفي | Masroofi V2</title>
+  <title>مصروفي | Masroofi V2.4</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=2.2.0" />
+  <link rel="stylesheet" href="style.css?v=2.3.0" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -72,8 +72,8 @@
         <div class="page-head"><button class="btn ghost" data-nav="home">رجوع</button><h2>العمليات</h2></div>
         <section class="panel filters">
           <div class="form-grid">
-            <label>من تاريخ<input id="filterFrom" type="date" /></label>
-            <label>إلى تاريخ<input id="filterTo" type="date" /></label>
+            <label>من تاريخ<input id="filterFrom" type="date" dir="ltr" lang="en-US" /></label>
+            <label>إلى تاريخ<input id="filterTo" type="date" dir="ltr" lang="en-US" /></label>
             <label class="wide">بحث بالكلمة / التصنيف / المستفيد / المكان<input id="filterText" type="search" placeholder="مثال: مطعم، بقالة، اسم المستفيد" /></label>
           </div>
           <div class="check-row">
@@ -129,7 +129,7 @@
         </section>
         <section class="panel version-panel">
           <h2>معلومات التطبيق</h2>
-          <p class="muted">الإصدار الحالي: <strong>Masroofi V2.2</strong></p>
+          <p class="muted">الإصدار الحالي: <strong>Masroofi V2.4</strong></p>
         </section>
         <button class="btn ghost full" data-nav="home">رجوع للرئيسية</button>
       </section>
@@ -151,10 +151,10 @@
       <div class="form-grid">
         <label>المبلغ<input id="amount" type="number" inputmode="decimal" min="0.01" step="0.01" autocomplete="off" required /></label>
         <label>التصنيف<input id="category" type="text" placeholder="بقالة، مطعم، وقود..." required /></label>
-        <label>المستفيد أو المستفيدين<input id="beneficiary" type="text" placeholder="اسم المستفيد" /></label>
-        <label>المكان<input id="place" type="text" placeholder="المكان" /></label>
-        <label>التاريخ<input id="date" type="date" required /></label>
-        <label>الوقت<input id="time" type="time" required /></label>
+        <label>المستفيد أو المستفيدين<input id="beneficiary" type="text" placeholder="اسم المستفيد" required /></label>
+        <label>المكان<input id="place" type="text" placeholder="المكان" required /></label>
+        <label>التاريخ<input id="date" type="date" dir="ltr" lang="en-US" required /></label>
+        <label>الوقت<input id="time" type="time" dir="ltr" lang="en-US" required /></label>
         <label>اليوم<input id="dayName" type="text" /></label>
         <label class="wide">ملاحظات<textarea id="notes" rows="3"></textarea></label>
       </div>
@@ -195,6 +195,6 @@
   </dialog>
 
   <div id="toast" class="toast"></div>
-  <script type="module" src="app.js?v=2.2.0"></script>
+  <script type="module" src="app.js?v=2.3.0"></script>
 </body>
 </html>
