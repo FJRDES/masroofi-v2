@@ -50,10 +50,32 @@ function setSyncStatus(isOnline){
   el.classList.toggle('offline', !isOnline);
 }
 const money = (n)=> `${fmtNum(n)} ${state.settings.currency||'SAR'}`;
-const todayISO = ()=> new Date().toISOString().slice(0,10);
+function localISODate(d=new Date()){
+  const x = d instanceof Date ? d : new Date(d);
+  const y = x.getFullYear();
+  const m = String(x.getMonth()+1).padStart(2,'0');
+  const day = String(x.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+const todayISO = ()=> localISODate(new Date());
 const nowTime = ()=> new Date().toTimeString().slice(0,5);
-const toDateObj = (date,time='00:00') => new Date(`${date}T${time || '00:00'}:00`);
-const dateKey = (d)=> d.toISOString().slice(0,10);
+function normalizeDateValue(date){
+  if(!date) return '';
+  const cleaned = String(date).trim().replaceAll('/','-');
+  const m = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if(!m) return cleaned;
+  return `${m[1]}-${String(Number(m[2])).padStart(2,'0')}-${String(Number(m[3])).padStart(2,'0')}`;
+}
+function toDateObj(date,time='00:00'){
+  const iso = normalizeDateValue(date);
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const tm = String(time || '00:00').match(/^(\d{1,2}):(\d{2})/);
+  if(!m) return new Date(NaN);
+  const hh = tm ? Number(tm[1]) : 0;
+  const mm = tm ? Number(tm[2]) : 0;
+  return new Date(Number(m[1]), Number(m[2])-1, Number(m[3]), hh, mm, 0, 0);
+}
+const dateKey = (d)=> localISODate(d);
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
 function confirmAction(msg){ return window.confirm(msg); }
 function dayNameFromDate(date){ const d = toDateObj(date,'12:00'); return arDays[d.getDay()]; }
@@ -66,9 +88,9 @@ function weekRange(d=new Date()){
 function monthRange(d=new Date()){
   return {start:new Date(d.getFullYear(),d.getMonth(),1), end:new Date(d.getFullYear(),d.getMonth()+1,0,23,59,59,999)};
 }
-function inRange(exp,start,end){ const dt = toDateObj(exp.date, exp.time); return dt>=start && dt<=end; }
+function inRange(exp,start,end){ const dt = toDateObj(exp.date, exp.time); return !Number.isNaN(dt.getTime()) && dt>=start && dt<=end; }
 function sum(list){ return list.reduce((a,b)=>a+Number(b.amount||0),0); }
-function sortExpenses(list){ return [...list].sort((a,b)=> toDateObj(b.date,b.time)-toDateObj(a.date,a.time)); }
+function sortExpenses(list){ return [...list].sort((a,b)=> { const db=toDateObj(b.date,b.time); const da=toDateObj(a.date,a.time); return (Number.isNaN(db.getTime())?0:db.getTime())-(Number.isNaN(da.getTime())?0:da.getTime()); }); }
 function userBase(){ return doc(db,'users',state.user.uid); }
 function expensesCol(){ return collection(db,'users',state.user.uid,'expenses'); }
 function settingsDoc(){ return doc(db,'users',state.user.uid,'settings','main'); }
@@ -215,8 +237,8 @@ $('expenseForm').addEventListener('submit', async(e)=>{
   const payload = {
     amount,
     category:$('category').value.trim(), beneficiary:$('beneficiary').value.trim(), place:$('place').value.trim(), notes:$('notes').value.trim(),
-    date:$('date').value, time:$('time').value, dayName:$('dayName').value.trim() || dayNameFromDate($('date').value),
-    dateTime: toDateObj($('date').value,$('time').value).toISOString(), updatedAt:serverTimestamp()
+    date:normalizeDateValue($('date').value), time:$('time').value, dayName:$('dayName').value.trim() || dayNameFromDate($('date').value),
+    dateTime: toDateObj(normalizeDateValue($('date').value),$('time').value).toISOString(), updatedAt:serverTimestamp()
   };
   if(!payload.amount || !payload.category || !payload.beneficiary || !payload.place || !payload.date || !payload.time){ alert('أكمل جميع الحقول المطلوبة قبل الحفظ. الملاحظات فقط اختيارية.'); return; }
   const old = id ? state.expenses.find(x=>x.id===id) : null;
@@ -248,7 +270,7 @@ function getQuickDetailData(type){
   const wr=weekRange(now), mr=monthRange(now);
   let title='تفاصيل العمليات', list=[], chartTitle='الرسم البياني', filename='masroofi_details.pdf', group='date';
   if(type==='today'){
-    title='عمليات اليوم'; list=state.expenses.filter(e=>e.date===todayISO()); chartTitle='مصروفات اليوم حسب الساعة'; filename='masroofi_today.pdf'; group='hour';
+    title='عمليات اليوم'; list=state.expenses.filter(e=>normalizeDateValue(e.date)===todayISO()); chartTitle='مصروفات اليوم حسب الساعة'; filename='masroofi_today.pdf'; group='hour';
   } else if(type==='week'){
     title='عمليات الأسبوع'; list=state.expenses.filter(e=>inRange(e,wr.start,wr.end)); chartTitle='مصروفات الأسبوع من الأحد إلى السبت'; filename='masroofi_week.pdf'; group='week';
   } else if(type==='month'){
@@ -260,7 +282,7 @@ function getQuickDetailData(type){
 }
 function groupByDate(list){
   const map=new Map();
-  sortExpenses(list).slice().reverse().forEach(e=>{ map.set(e.date,(map.get(e.date)||0)+Number(e.amount||0)); });
+  sortExpenses(list).slice().reverse().forEach(e=>{ const k=normalizeDateValue(e.date); map.set(k,(map.get(k)||0)+Number(e.amount||0)); });
   const entries=[...map.entries()];
   if(!entries.length) return {labels:['-'], vals:[0]};
   const shown=entries.slice(-14);
@@ -290,7 +312,7 @@ function openQuickDetails(type){
 function renderAll(){ renderHome(); renderLists(); renderFilters(); renderCharts(); if(state.quickDetail && $('quickDetailsDialog')?.open){ const d=getQuickDetailData(state.quickDetail); $('quickDetailsSum').textContent=money(sum(d.list)); $('quickDetailsCount').textContent=`${fmtNum(d.list.length)} عملية`; $('quickDetailsList').innerHTML=d.list.length ? d.list.map(itemHtml).join('') : 'لا توجد عمليات.'; const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); } }
 function renderHome(){
   const now = new Date(); const tkey=todayISO(); const wr=weekRange(now); const mr=monthRange(now);
-  const today = state.expenses.filter(e=>e.date===tkey); const week=state.expenses.filter(e=>inRange(e,wr.start,wr.end)); const month=state.expenses.filter(e=>inRange(e,mr.start,mr.end));
+  const today = state.expenses.filter(e=>normalizeDateValue(e.date)===tkey); const week=state.expenses.filter(e=>inRange(e,wr.start,wr.end)); const month=state.expenses.filter(e=>inRange(e,mr.start,mr.end));
   const st=sum(today), sw=sum(week), sm=sum(month); const budget = Number(state.settings.monthlyBudget||0); const remaining = budget - sm;
   $('todayTotal').textContent=money(st); $('weekTotal').textContent=money(sw); $('monthTotal').textContent=money(sm); $('countTotal').textContent=fmtNum(state.expenses.length); $('budgetRemaining').textContent=money(remaining);
   $('budgetNote').textContent = budget ? `المستخدم من الميزانية: ${money(sm)}` : 'اضبط الميزانية من الإعدادات';
@@ -371,7 +393,7 @@ function svgLine(labels, values, title){
 function groupByHour(list){ const labels=Array.from({length:24},(_,i)=>hourLabel(i)); const vals=labels.map(()=>0); list.forEach(e=>{const h=Number((e.time||'00:00').slice(0,2)); vals[h]+=Number(e.amount||0);}); return {labels,vals}; }
 function groupByWeekDays(list,wr){ const labels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']; const vals=labels.map(()=>0); list.forEach(e=>{ vals[toDateObj(e.date,e.time).getDay()]+=Number(e.amount||0); }); return {labels,vals}; }
 function groupByMonthDays(list,mr){ const days=new Date(mr.end).getDate(); const labels=Array.from({length:days},(_,i)=>String(i+1)); const vals=labels.map(()=>0); list.forEach(e=>{ vals[toDateObj(e.date,e.time).getDate()-1]+=Number(e.amount||0); }); return {labels,vals}; }
-function renderCharts(){ const now=new Date(), wr=weekRange(now), mr=monthRange(now); const today=state.expenses.filter(e=>e.date===todayISO()), week=state.expenses.filter(e=>inRange(e,wr.start,wr.end)), month=state.expenses.filter(e=>inRange(e,mr.start,mr.end)); let g=groupByHour(today); drawLine($('chartToday'),g.labels,g.vals); g=groupByWeekDays(week,wr); drawLine($('chartWeek'),g.labels,g.vals); g=groupByMonthDays(month,mr); drawLine($('chartMonth'),g.labels,g.vals); }
+function renderCharts(){ const now=new Date(), wr=weekRange(now), mr=monthRange(now); const today=state.expenses.filter(e=>normalizeDateValue(e.date)===todayISO()), week=state.expenses.filter(e=>inRange(e,wr.start,wr.end)), month=state.expenses.filter(e=>inRange(e,mr.start,mr.end)); let g=groupByHour(today); drawLine($('chartToday'),g.labels,g.vals); g=groupByWeekDays(week,wr); drawLine($('chartWeek'),g.labels,g.vals); g=groupByMonthDays(month,mr); drawLine($('chartMonth'),g.labels,g.vals); }
 window.addEventListener('resize', ()=>{ renderCharts(); if(state.quickDetail && $('quickDetailsDialog')?.open){ const d=getQuickDetailData(state.quickDetail); const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); } });
 
 $('exportCsvBtn').onclick=()=> exportCSV(currentFiltered(),'masroofi_search.csv');
@@ -380,7 +402,7 @@ function downloadBlob(content,filename,type){ const a=document.createElement('a'
 $('backupJsonBtn').onclick=()=> downloadBlob(JSON.stringify({settings:state.settings, expenses:state.expenses},null,2),'masroofi_backup.json','application/json');
 $('restoreJsonInput').onchange=async(e)=>{ const file=e.target.files[0]; if(!file||!state.user)return; if(!confirmAction('سيتم استيراد العمليات إلى حسابك. هل تريد المتابعة؟'))return; const data=JSON.parse(await file.text()); const batch=writeBatch(db); if(data.settings) batch.set(settingsDoc(),data.settings,{merge:true}); (data.expenses||[]).forEach(x=>{const ref=doc(expensesCol()); const {id,...rest}=x; batch.set(ref,{...rest,updatedAt:serverTimestamp()});}); await batch.commit(); toast('تمت الاستعادة'); };
 $('printSearchBtn').onclick=()=> printReport('تقرير البحث', currentFiltered(), {chartTitle:'رسم نتائج البحث', chartMode:'auto'});
-document.querySelectorAll('[data-report]').forEach(btn=>btn.onclick=()=>{ const type=btn.dataset.report, now=new Date(); let title='', list=[], chartMode='auto', chartTitle='الرسم البياني'; if(type==='daily'){title='التقرير اليومي'; list=state.expenses.filter(e=>e.date===todayISO()); chartMode='hour'; chartTitle='مصروفات اليوم حسب الساعة';} if(type==='weekly'){title='التقرير الأسبوعي'; const r=weekRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end)); chartMode='week'; chartTitle='مصروفات الأسبوع من الأحد إلى السبت';} if(type==='monthly'){title='التقرير الشهري'; const r=monthRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end)); chartMode='month'; chartTitle='مصروفات الشهر حسب الأيام';} printReport(title, sortExpenses(list), {chartTitle, chartMode}); });
+document.querySelectorAll('[data-report]').forEach(btn=>btn.onclick=()=>{ const type=btn.dataset.report, now=new Date(); let title='', list=[], chartMode='auto', chartTitle='الرسم البياني'; if(type==='daily'){title='التقرير اليومي'; list=state.expenses.filter(e=>normalizeDateValue(e.date)===todayISO()); chartMode='hour'; chartTitle='مصروفات اليوم حسب الساعة';} if(type==='weekly'){title='التقرير الأسبوعي'; const r=weekRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end)); chartMode='week'; chartTitle='مصروفات الأسبوع من الأحد إلى السبت';} if(type==='monthly'){title='التقرير الشهري'; const r=monthRange(now); list=state.expenses.filter(e=>inRange(e,r.start,r.end)); chartMode='month'; chartTitle='مصروفات الشهر حسب الأيام';} printReport(title, sortExpenses(list), {chartTitle, chartMode}); });
 function reportChartData(list, mode='auto'){
   const sorted=sortExpenses(list);
   if(mode==='hour') return groupByHour(sorted);
