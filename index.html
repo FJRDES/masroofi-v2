@@ -38,14 +38,6 @@
           <button class="btn primary" data-open-expense>+ إضافة مصروف</button>
         </div>
 
-        <section class="panel budget-cycle-summary">
-          <div class="panel-title"><h2>دورة الميزانية</h2><span id="cyclePeriodText">غير محددة</span></div>
-          <div class="mini-stats">
-            <div><span>المستخدم</span><strong id="cycleUsedTotal">0 SAR</strong></div>
-            <div><span>المتبقي</span><strong id="cycleRemainingTotal">0 SAR</strong></div>
-            <div><span>الأيام المتبقية</span><strong id="cycleDaysLeft">0</strong></div>
-          </div>
-        </section>
 
         <div class="cards-grid">
           <article class="stat-card clickable" id="todayCard" data-quick-detail="today" role="button" tabindex="0" aria-label="عرض عمليات اليوم">
@@ -54,8 +46,8 @@
           <article class="stat-card clickable" id="weekCard" data-quick-detail="week" role="button" tabindex="0" aria-label="عرض عمليات الأسبوع">
             <span>مصروف الأسبوع</span><strong id="weekTotal">0 SAR</strong><small id="weekLimitText">الأحد إلى السبت</small>
           </article>
-          <article class="stat-card clickable" id="monthCard" data-quick-detail="month" role="button" tabindex="0" aria-label="عرض عمليات الشهر">
-            <span>مصروف الشهر الميلادي</span><strong id="monthTotal">0 SAR</strong><small id="monthLimitText">الشهر الحالي</small>
+          <article class="stat-card clickable" id="monthCard" data-quick-detail="cycle" role="button" tabindex="0" aria-label="عرض عمليات دورة الميزانية">
+            <span>مصروف دورة الميزانية</span><strong id="monthTotal">0 SAR</strong><small id="monthLimitText">الشهر الحالي</small>
           </article>
           <article class="stat-card neutral clickable" data-quick-detail="all" role="button" tabindex="0" aria-label="عرض جميع العمليات">
             <span>عدد العمليات</span><strong id="countTotal">0</strong><small>كل العمليات المسجلة</small>

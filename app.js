@@ -207,7 +207,7 @@ async function bootAuth(){
     state.unsub.push(onSnapshot(settingsDoc(), snap=>{
       if(snap.exists()) state.settings = {...state.settings, ...snap.data()};
       else setDoc(settingsDoc(), state.settings, {merge:true});
-      fillSettings(); renderAll();
+      fillSettings(); renderFilters(true); renderAll();
     }));
     state.unsub.push(onSnapshot(query(expensesCol(), orderBy('dateTime','desc')), snap=>{
       state.expenses = snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -310,7 +310,10 @@ function getQuickDetailData(type){
   } else if(type==='week'){
     title='عمليات الأسبوع'; list=state.expenses.filter(e=>inRange(e,wr.start,wr.end)); chartTitle='مصروفات الأسبوع من الأحد إلى السبت'; filename='masroofi_week.pdf'; group='week';
   } else if(type==='month'){
-    title='عمليات الشهر'; list=state.expenses.filter(e=>inRange(e,mr.start,mr.end)); chartTitle='مصروفات الشهر حسب الأيام'; filename='masroofi_month.pdf'; group='month';
+    title='عمليات الشهر الميلادي'; list=state.expenses.filter(e=>inRange(e,mr.start,mr.end)); chartTitle='مصروفات الشهر الميلادي حسب الأيام'; filename='masroofi_month.pdf'; group='month';
+  } else if(type==='cycle'){
+    const br=budgetCycleRange();
+    title='عمليات دورة الميزانية'; list=state.expenses.filter(e=>inRange(e,br.start,br.end)); chartTitle='مصروفات دورة الميزانية حسب التاريخ'; filename='masroofi_budget_cycle.pdf'; group='date';
   } else {
     title='جميع العمليات'; list=[...state.expenses]; chartTitle='جميع العمليات حسب التاريخ'; filename='masroofi_all_transactions.pdf'; group='date';
   }
@@ -357,20 +360,16 @@ function renderHome(){
   const remaining = budget - cycleUsed;
   $('todayTotal').textContent=money(st);
   $('weekTotal').textContent=money(sw);
-  $('monthTotal').textContent=money(sm);
+  $('monthTotal').textContent=money(cycleUsed);
   $('countTotal').textContent=fmtNum(state.expenses.length);
   $('budgetRemaining').textContent=money(remaining);
-  $('budgetNote').textContent = budget ? `المستخدم من الميزانية: ${money(cycleUsed)} · دورة ${budgetCycleLabel()}` : 'اضبط ميزانية الدورة من الإعدادات';
-  if($('cyclePeriodText')) $('cyclePeriodText').textContent = br.isCustom ? budgetCycleLabel() : `الشهر الحالي ${displayMonthLabel(now)}`;
-  if($('cycleUsedTotal')) $('cycleUsedTotal').textContent = money(cycleUsed);
-  if($('cycleRemainingTotal')) $('cycleRemainingTotal').textContent = money(remaining);
-  if($('cycleDaysLeft')) $('cycleDaysLeft').textContent = fmtNum(daysLeftInCycle());
+  $('budgetNote').textContent = budget ? `المستخدم من الميزانية: ${money(cycleUsed)} · الأيام المتبقية: ${fmtNum(daysLeftInCycle())} · دورة ${budgetCycleLabel()}` : 'اضبط ميزانية الدورة من الإعدادات';
   $('todayLimitText').textContent=`الحد اليومي: ${money(state.settings.dailyLimit)} · ${formatDisplayDate(tkey)}`;
   $('weekLimitText').textContent=`الحد الأسبوعي: ${money(state.settings.weeklyLimit)} · ${displayDateRange(wr.start, wr.end)}`;
-  $('monthLimitText').textContent=`الشهر الميلادي: ${displayMonthLabel(now)}`;
+  $('monthLimitText').textContent=`دورة الميزانية: ${budgetCycleLabel()}`;
   setCardStatus($('todayCard'),st,state.settings.dailyLimit);
   setCardStatus($('weekCard'),sw,state.settings.weeklyLimit);
-  setCardStatus($('monthCard'),sm,0);
+  setCardStatus($('monthCard'),cycleUsed,budget);
 }
 function setCardStatus(el,total,limit){ el.classList.remove('ok','warn','bad','neutral'); if(!limit){el.classList.add('neutral'); return;} const r=total/limit; el.classList.add(r>1?'bad':r>=.5?'warn':'ok'); }
 function itemHtml(e){ return `<div class="item" data-id="${e.id}"><div><strong>${escapeHtml(e.category||'-')}</strong><div class="meta">${escapeHtml(e.beneficiary||'بدون مستفيد')} · ${escapeHtml(e.place||'بدون مكان')}</div><div class="meta">${displayDateTime(e)}</div></div><div class="amount">${money(e.amount)}</div></div>`; }
@@ -391,7 +390,13 @@ function currentFiltered(){
   }
   return sortExpenses(list);
 }
-function renderFilters(){ if(!$('filterFrom').value) {$('filterFrom').value=todayISO(); $('filterTo').value=todayISO();} }
+function renderFilters(force=false){
+  const br=budgetCycleRange();
+  if(force || !$('filterFrom').value || !$('filterTo').value){
+    $('filterFrom').value=br.startIso;
+    $('filterTo').value=br.endIso;
+  }
+}
 function renderTransactions(){
   const list=currentFiltered(); $('filteredSum').textContent=money(sum(list)); $('filteredCount').textContent=`${fmtNum(list.length)} عملية`;
   $('transactionsList').innerHTML = list.length ? list.map(itemHtml).join('') : 'لا توجد نتائج.'; $('transactionsList').classList.toggle('empty',!list.length);
