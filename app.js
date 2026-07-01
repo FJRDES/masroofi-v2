@@ -360,16 +360,16 @@ function renderHome(){
   const remaining = budget - cycleUsed;
   $('todayTotal').textContent=money(st);
   $('weekTotal').textContent=money(sw);
-  $('monthTotal').textContent=money(cycleUsed);
+  $('monthTotal').textContent=money(sm);
   $('countTotal').textContent=fmtNum(state.expenses.length);
   $('budgetRemaining').textContent=money(remaining);
   $('budgetNote').textContent = budget ? `المستخدم من الميزانية: ${money(cycleUsed)} · الأيام المتبقية: ${fmtNum(daysLeftInCycle())} · دورة ${budgetCycleLabel()}` : 'اضبط ميزانية الدورة من الإعدادات';
   $('todayLimitText').textContent=`الحد اليومي: ${money(state.settings.dailyLimit)} · ${formatDisplayDate(tkey)}`;
   $('weekLimitText').textContent=`الحد الأسبوعي: ${money(state.settings.weeklyLimit)} · ${displayDateRange(wr.start, wr.end)}`;
-  $('monthLimitText').textContent=`دورة الميزانية: ${budgetCycleLabel()}`;
+  $('monthLimitText').textContent=`الشهر الميلادي: ${formatDisplayDate(monthRange(now).start).slice(0,7)}`;
   setCardStatus($('todayCard'),st,state.settings.dailyLimit);
   setCardStatus($('weekCard'),sw,state.settings.weeklyLimit);
-  setCardStatus($('monthCard'),cycleUsed,budget);
+  setCardStatus($('monthCard'),sm,budget);
 }
 function setCardStatus(el,total,limit){ el.classList.remove('ok','warn','bad','neutral'); if(!limit){el.classList.add('neutral'); return;} const r=total/limit; el.classList.add(r>1?'bad':r>=.5?'warn':'ok'); }
 function itemHtml(e){ return `<div class="item" data-id="${e.id}"><div><strong>${escapeHtml(e.category||'-')}</strong><div class="meta">${escapeHtml(e.beneficiary||'بدون مستفيد')} · ${escapeHtml(e.place||'بدون مكان')}</div><div class="meta">${displayDateTime(e)}</div></div><div class="amount">${money(e.amount)}</div></div>`; }
