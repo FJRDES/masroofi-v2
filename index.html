@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f766e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="مصروفي" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>مصروفي | Masroofi V3.6</title>
+  <link rel="manifest" href="manifest.json?v=3.6.0" />
+  <link rel="icon" href="icon-v5.svg?v=3.6.0" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon-180.png?v=3.6.0" />
+  <link rel="stylesheet" href="style.css?v=3.6.0" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Masroofi V3.6</p>
+        <h1>مصروفي</h1>
+      </div>
+      <div class="auth-box">
+        <span id="syncStatus" class="sync-status">غير متصل</span>
+        <button id="loginBtn" class="btn small primary">تسجيل الدخول</button>
+        <button id="logoutBtn" class="btn small ghost hidden">خروج</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="view-home" class="view active">
+        <div class="hero-card">
+          <div>
+            <span class="label">المتبقي من الميزانية</span>
+            <strong id="budgetRemaining">0 SAR</strong>
+            <small id="budgetNote">اضبط دورة الميزانية من الإعدادات</small>
+          </div>
+          <button class="btn primary" data-open-expense>+ إضافة مصروف</button>
+        </div>
+
+
+        <div class="cards-grid">
+          <article class="stat-card clickable" id="todayCard" data-quick-detail="today" role="button" tabindex="0" aria-label="عرض عمليات اليوم">
+            <span>مصروف اليوم</span><strong id="todayTotal">0 SAR</strong><small id="todayLimitText">الحد: 0</small>
+          </article>
+          <article class="stat-card clickable" id="weekCard" data-quick-detail="week" role="button" tabindex="0" aria-label="عرض عمليات الأسبوع">
+            <span>مصروف الأسبوع</span><strong id="weekTotal">0 SAR</strong><small id="weekLimitText">الأحد إلى السبت</small>
+          </article>
+          <article class="stat-card clickable" id="monthCard" data-quick-detail="month" role="button" tabindex="0" aria-label="عرض عمليات الشهر الميلادي">
+            <span>مصروف الشهر</span><strong id="monthTotal">0 SAR</strong><small id="monthLimitText">الشهر الميلادي الحالي</small>
+          </article>
+          <article class="stat-card neutral clickable" data-quick-detail="all" role="button" tabindex="0" aria-label="عرض جميع العمليات">
+            <span>عدد العمليات</span><strong id="countTotal">0</strong><small>كل العمليات المسجلة</small>
+          </article>
+        </div>
+
+        <section class="panel">
+          <div class="panel-title"><h2>آخر العمليات</h2><button class="link-btn" data-nav="transactions">عرض الكل</button></div>
+          <div id="recentList" class="list empty">لا توجد عمليات بعد.</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title"><h2>الرسوم البيانية</h2><span>تتحدث تلقائيًا</span></div>
+          <div class="chart-stack">
+            <div class="chart-card"><h3>مصروفات اليوم</h3><canvas id="chartToday" height="145"></canvas></div>
+            <div class="chart-card"><h3>مصروفات الأسبوع</h3><canvas id="chartWeek" height="145"></canvas></div>
+            <div class="chart-card"><h3>مصروفات الشهر</h3><canvas id="chartMonth" height="145"></canvas></div>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-transactions" class="view">
+        <div class="page-head"><button class="btn ghost" data-nav="home">رجوع</button><h2>العمليات</h2></div>
+        <section class="panel filters">
+          <div class="form-grid">
+            <label>من تاريخ<input id="filterFrom" type="date" dir="ltr" lang="en-US" /></label>
+            <label>إلى تاريخ<input id="filterTo" type="date" dir="ltr" lang="en-US" /></label>
+            <label class="wide">بحث بالكلمة / التصنيف / المستفيد / المكان<input id="filterText" type="search" placeholder="مثال: مطعم، بقالة، اسم المستفيد" /></label>
+          </div>
+          <div class="check-row">
+            <label><input id="useDateFilter" type="checkbox" checked /> استخدام التاريخ</label>
+            <label><input id="searchCategory" type="checkbox" checked /> التصنيف</label>
+            <label><input id="searchBeneficiary" type="checkbox" checked /> المستفيد</label>
+            <label><input id="searchPlace" type="checkbox" checked /> المكان</label>
+            <label><input id="searchNotes" type="checkbox" checked /> الملاحظات</label>
+          </div>
+          <div class="result-bar"><strong>مجموع النتائج: <span id="filteredSum">0 SAR</span></strong><span id="filteredCount">0 عملية</span></div>
+          <div class="actions-row">
+            <button id="exportCsvBtn" class="btn secondary">تصدير Excel/CSV</button>
+            <button id="printSearchBtn" class="btn secondary">طباعة تقرير البحث</button>
+          </div>
+        </section>
+        <section class="panel">
+          <div id="transactionsList" class="list empty">لا توجد نتائج.</div>
+        </section>
+        <button class="btn ghost full" data-nav="home">رجوع للرئيسية</button>
+      </section>
+
+      <section id="view-reports" class="view">
+        <div class="page-head"><button class="btn ghost" data-nav="home">رجوع</button><h2>التقارير</h2></div>
+        <div class="report-grid">
+          <button class="report-card" data-report="daily">تقرير يومي<span>عمليات اليوم الحالي فقط</span></button>
+          <button class="report-card" data-report="weekly">تقرير أسبوعي<span>من الأحد إلى السبت</span></button>
+          <button class="report-card" data-report="monthly">تقرير شهري<span>الشهر الميلادي الحالي</span></button>
+          <button class="report-card" data-report="cycle">تقرير دورة الميزانية<span>حسب تاريخ البداية والنهاية في الإعدادات</span></button>
+        </div>
+        <section class="panel">
+          <h2>ملاحظة</h2>
+          <p class="muted">التقارير لا تتضمن نموذج إضافة المصروف، وتعرض العمليات المرتبطة بالتقرير فقط، مرتبة بالتاريخ والوقت، مع رسوم بيانية في النهاية.</p>
+        </section>
+        <button class="btn ghost full" data-nav="home">رجوع للرئيسية</button>
+      </section>
+
+      <section id="view-settings" class="view">
+        <div class="page-head"><button class="btn ghost" data-nav="home">رجوع</button><h2>الإعدادات</h2></div>
+        <section class="panel">
+          <form id="settingsForm" class="form-grid">
+            <label>الحد اليومي<input id="dailyLimit" type="number" inputmode="decimal" min="0" step="0.01" /></label>
+            <label>الحد الأسبوعي<input id="weeklyLimit" type="number" inputmode="decimal" min="0" step="0.01" /></label>
+            <label>ميزانية الدورة<input id="monthlyBudget" type="number" inputmode="decimal" min="0" step="0.01" /></label>
+            <label>بداية دورة الميزانية<input id="budgetCycleStart" type="date" dir="ltr" lang="en-US" /></label>
+            <label>نهاية دورة الميزانية<input id="budgetCycleEnd" type="date" dir="ltr" lang="en-US" /></label>
+            <label>العملة<input id="currency" type="text" value="SAR" /></label>
+            <button class="btn primary wide" type="submit">حفظ الإعدادات</button>
+          </form>
+        </section>
+        <section class="panel">
+          <h2>نسخة احتياطية</h2>
+          <div class="actions-row">
+            <button id="backupJsonBtn" class="btn secondary">تصدير JSON</button>
+            <label class="btn secondary file-btn">استعادة JSON<input id="restoreJsonInput" type="file" accept="application/json" hidden /></label>
+          </div>
+        </section>
+        <section class="panel version-panel">
+          <h2>معلومات التطبيق</h2>
+          <p class="muted">الإصدار الحالي: <strong>Masroofi V3.6</strong></p>
+        </section>
+        <button class="btn ghost full" data-nav="home">رجوع للرئيسية</button>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button data-nav="home" class="active">الرئيسية</button>
+      <button data-nav="transactions">العمليات</button>
+      <button data-open-expense class="fab">+</button>
+      <button data-nav="reports">التقارير</button>
+      <button data-nav="settings">الإعدادات</button>
+    </nav>
+  </div>
+
+  <dialog id="expenseDialog" class="modal">
+    <form id="expenseForm" method="dialog">
+      <div class="modal-head"><h2 id="expenseDialogTitle">إضافة مصروف</h2><button type="button" class="icon-btn" data-close-dialog>×</button></div>
+      <input id="expenseId" type="hidden" />
+      <div class="form-grid">
+        <label>المبلغ<input id="amount" type="number" inputmode="decimal" min="0.01" step="0.01" autocomplete="off" required /></label>
+        <label>التصنيف<input id="category" type="text" placeholder="بقالة، مطعم، وقود..." required /></label>
+        <label>المستفيد أو المستفيدين<input id="beneficiary" type="text" placeholder="اسم المستفيد" required /></label>
+        <label>المكان<input id="place" type="text" placeholder="المكان" required /></label>
+        <label>التاريخ<input id="date" type="date" dir="ltr" lang="en-US" required /></label>
+        <label>الوقت<input id="time" type="time" dir="ltr" lang="en-US" required /></label>
+        <label>اليوم<input id="dayName" type="text" /></label>
+        <label class="wide">ملاحظات<textarea id="notes" rows="3"></textarea></label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" data-close-dialog>إلغاء</button>
+        <button id="deleteExpenseBtn" type="button" class="btn danger hidden">حذف</button>
+        <button type="submit" class="btn primary">حفظ</button>
+      </div>
+    </form>
+  </dialog>
+
+
+
+  <dialog id="quickDetailsDialog" class="modal detail-modal">
+    <div class="detail-shell">
+      <div class="modal-head">
+        <h2 id="quickDetailsTitle">تفاصيل العمليات</h2>
+        <button type="button" class="icon-btn" data-close-quick-details aria-label="إغلاق">×</button>
+      </div>
+      <div class="detail-summary">
+        <div><span>الإجمالي</span><strong id="quickDetailsSum">0 SAR</strong></div>
+        <div><span>عدد العمليات</span><strong id="quickDetailsCount">0</strong></div>
+      </div>
+      <div class="chart-card detail-chart-card">
+        <h3 id="quickDetailsChartTitle">الرسم البياني</h3>
+        <canvas id="quickDetailsChart" height="145"></canvas>
+      </div>
+      <div class="actions-row detail-actions">
+        <button id="quickDetailsPdfBtn" type="button" class="btn secondary">PDF / طباعة</button>
+        <button id="quickDetailsCsvBtn" type="button" class="btn secondary">Excel/CSV</button>
+      </div>
+      <div id="quickDetailsList" class="list empty">لا توجد عمليات.</div>
+      <div class="modal-actions sticky-actions">
+        <button type="button" class="btn ghost" data-close-quick-details>إلغاء</button>
+        <button type="button" class="btn primary" data-close-quick-details>العودة للتطبيق</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast"></div>
+  <script type="module" src="app.js?v=3.6.0"></script>
+</body>
+</html>
