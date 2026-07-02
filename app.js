@@ -250,6 +250,20 @@ document.querySelectorAll('[data-analytics-filter]').forEach(el=>{
   el.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); open(); } });
 });
 
+const archiveListEl = $('archiveList');
+if(archiveListEl){
+  archiveListEl.addEventListener('click', (e)=>{
+    const btn = e.target.closest('[data-archive-action]');
+    if(!btn) return;
+    const key = btn.dataset.archiveKey;
+    const action = btn.dataset.archiveAction;
+    const detail = getArchiveDetailData(key);
+    if(action === 'open') openArchiveCycle(key);
+    if(action === 'csv') exportCSV(detail.list, `masroofi_cycle_${key}.csv`);
+    if(action === 'print') printReport(detail.title, detail.list, {chartTitle:detail.chartTitle, chartMode:'date'});
+  });
+}
+
 function openExpense(exp=null){
   if(!state.user){ toast('سجل الدخول أولاً'); return; }
   $('expenseForm').reset(); $('expenseId').value=''; $('deleteExpenseBtn').classList.add('hidden');
@@ -318,6 +332,7 @@ $('deleteExpenseBtn').onclick = async()=>{
 
 
 function getQuickDetailData(type){
+  if(String(type||'').startsWith('archive:')) return getArchiveDetailData(String(type).slice(8));
   const now=new Date();
   const wr=weekRange(now), mr=monthRange(now);
   let title='تفاصيل العمليات', list=[], chartTitle='الرسم البياني', filename='masroofi_details.pdf', group='date';
@@ -518,7 +533,112 @@ function openAnalyticsFilter(type){
   bindItems();
 }
 
-function renderAll(){ renderHome(); renderAnalytics(); renderLists(); renderFilters(); renderCharts(); if(state.quickDetail && $('quickDetailsDialog')?.open){ const d=getQuickDetailData(state.quickDetail); $('quickDetailsSum').textContent=money(sum(d.list)); $('quickDetailsCount').textContent=`${fmtNum(d.list.length)} عملية`; $('quickDetailsList').innerHTML=d.list.length ? d.list.map(itemHtml).join('') : 'لا توجد عمليات.'; const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); } }
+function daysInMonth(year, monthIndex){ return new Date(year, monthIndex + 1, 0).getDate(); }
+function shiftMonthDate(date, months){
+  const d = new Date(date); d.setHours(0,0,0,0);
+  const y = d.getFullYear();
+  const m = d.getMonth() + months;
+  const targetYear = y + Math.floor(m / 12);
+  const targetMonth = ((m % 12) + 12) % 12;
+  const day = Math.min(d.getDate(), daysInMonth(targetYear, targetMonth));
+  return new Date(targetYear, targetMonth, day, 0, 0, 0, 0);
+}
+function dominantCycleMonthLabel(start,end){
+  const counts = new Map();
+  const d = new Date(start); d.setHours(0,0,0,0);
+  const stop = new Date(end); stop.setHours(0,0,0,0);
+  while(d <= stop){
+    const key = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`;
+    counts.set(key,(counts.get(key)||0)+1);
+    d.setDate(d.getDate()+1);
+  }
+  return [...counts.entries()].sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0]))[0]?.[0] || displayMonthLabel(start);
+}
+function budgetCycleName(start,end){ return `دورة ميزانية ${dominantCycleMonthLabel(start,end)}`; }
+function archiveCycleKey(start,end){ return `${localISODate(start)}_${localISODate(end)}`; }
+function buildBudgetCycles(){
+  const current = budgetCycleRange();
+  const budget = Number(state.settings.monthlyBudget||0);
+  let minDate = new Date(current.start), maxDate = new Date(current.end);
+  state.expenses.forEach(e=>{
+    const dt = toDateObj(e.date,e.time||'00:00');
+    if(Number.isNaN(dt.getTime())) return;
+    if(dt < minDate) minDate = dt;
+    if(dt > maxDate) maxDate = dt;
+  });
+  minDate.setHours(0,0,0,0); maxDate.setHours(23,59,59,999);
+  const cycles=[];
+  for(let i=-72;i<=24;i++){
+    const start = shiftMonthDate(current.start, i);
+    const end = shiftMonthDate(current.end, i); end.setHours(23,59,59,999);
+    if(end < minDate || start > maxDate) continue;
+    const list = state.expenses.filter(e=>inRange(e,start,end));
+    const used = sum(list);
+    const key = archiveCycleKey(start,end);
+    const remaining = budget - used;
+    const ratio = budget ? used / budget : 0;
+    cycles.push({key,start,end,startIso:localISODate(start),endIso:localISODate(end),name:budgetCycleName(start,end),list:sortExpenses(list),used,budget,remaining,ratio,isCurrent:key===archiveCycleKey(current.start,current.end)});
+  }
+  if(!cycles.length){
+    const start=current.start,end=current.end;
+    cycles.push({key:archiveCycleKey(start,end),start,end,startIso:current.startIso,endIso:current.endIso,name:budgetCycleName(start,end),list:[],used:0,budget,remaining:budget,ratio:0,isCurrent:true});
+  }
+  return cycles.sort((a,b)=>b.start-a.start);
+}
+function archiveStatus(cycle){
+  if(!cycle.budget) return {label:'بدون ميزانية', cls:'neutral'};
+  if(cycle.ratio >= 1) return {label:'تجاوز الميزانية', cls:'bad'};
+  if(cycle.ratio >= .8) return {label:'يحتاج انتباه', cls:'warn'};
+  return {label:'ضمن الميزانية', cls:'ok'};
+}
+function renderArchive(){
+  const el=$('archiveList');
+  if(!el) return;
+  if(!state.user){ el.innerHTML='سجل الدخول لعرض أرشيف الميزانيات.'; el.classList.add('empty'); return; }
+  const cycles=buildBudgetCycles();
+  el.classList.toggle('empty', !cycles.length);
+  el.innerHTML = cycles.map(c=>{
+    const status=archiveStatus(c);
+    const pct=percentText(c.ratio);
+    const color=usageColor(c.ratio);
+    return `<article class="archive-card ${status.cls}">
+      <div class="archive-head">
+        <div><h3>${escapeHtml(c.name)} ${c.isCurrent?'<span class="current-badge">الحالية</span>':''}</h3><small class="ltr">${formatDisplayDate(c.startIso)} → ${formatDisplayDate(c.endIso)}</small></div>
+        <span class="archive-status">${status.label}</span>
+      </div>
+      <div class="archive-stats">
+        <div><span>الميزانية</span><strong>${money(c.budget)}</strong></div>
+        <div><span>المستخدم</span><strong>${money(c.used)}</strong></div>
+        <div><span>المتبقي</span><strong>${money(c.remaining)}</strong></div>
+        <div><span>العمليات</span><strong>${fmtNum(c.list.length)}</strong></div>
+      </div>
+      <div class="archive-progress"><span style="width:${Math.max(0,Math.min(c.ratio,1))*100}%;background:${color}"></span></div>
+      <div class="archive-foot"><small>${pct} من الميزانية</small><div class="archive-actions"><button class="btn small secondary" data-archive-action="open" data-archive-key="${c.key}">فتح الدورة</button><button class="btn small ghost" data-archive-action="print" data-archive-key="${c.key}">PDF</button><button class="btn small ghost" data-archive-action="csv" data-archive-key="${c.key}">Excel</button></div></div>
+    </article>`;
+  }).join('');
+}
+function getArchiveCycle(key){ return buildBudgetCycles().find(c=>c.key===key) || buildBudgetCycles()[0]; }
+function getArchiveDetailData(key){
+  const c=getArchiveCycle(key);
+  const title = c ? `${c.name} (${formatDisplayDate(c.startIso)} → ${formatDisplayDate(c.endIso)})` : 'تفاصيل دورة الميزانية';
+  const list = c ? c.list : [];
+  return {type:'archive',title,list:sortExpenses(list),chartTitle:`مصروفات ${c?.name || 'الدورة'} حسب التاريخ`,filename:`masroofi_cycle_${key}.pdf`,group:'date'};
+}
+function openArchiveCycle(key){
+  if(!state.user){ toast('سجل الدخول أولاً'); return; }
+  state.quickDetail=`archive:${key}`;
+  const d=getArchiveDetailData(key);
+  $('quickDetailsTitle').textContent=d.title;
+  $('quickDetailsChartTitle').textContent=d.chartTitle;
+  $('quickDetailsSum').textContent=money(sum(d.list));
+  $('quickDetailsCount').textContent=`${fmtNum(d.list.length)} عملية`;
+  $('quickDetailsList').innerHTML=d.list.length ? d.list.map(itemHtml).join('') : 'لا توجد عمليات.';
+  $('quickDetailsList').classList.toggle('empty', !d.list.length);
+  $('quickDetailsDialog').showModal();
+  setTimeout(()=>{ const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); bindItems(); }, 80);
+}
+
+function renderAll(){ renderHome(); renderAnalytics(); renderArchive(); renderLists(); renderFilters(); renderCharts(); if(state.quickDetail && $('quickDetailsDialog')?.open){ const d=getQuickDetailData(state.quickDetail); $('quickDetailsTitle').textContent=d.title; $('quickDetailsChartTitle').textContent=d.chartTitle; $('quickDetailsSum').textContent=money(sum(d.list)); $('quickDetailsCount').textContent=`${fmtNum(d.list.length)} عملية`; $('quickDetailsList').innerHTML=d.list.length ? d.list.map(itemHtml).join('') : 'لا توجد عمليات.'; const g=quickChartData(d); drawLine($('quickDetailsChart'),g.labels,g.vals); } }
 function renderHome(){
   const now = new Date(); const tkey=todayISO(); const wr=weekRange(now); const br=budgetCycleRange();
   const today = state.expenses.filter(e=>normalizeDateValue(e.date)===tkey);

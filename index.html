@@ -7,17 +7,17 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="مصروفي" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <title>مصروفي | Masroofi V3.7</title>
-  <link rel="manifest" href="manifest.json?v=3.7.0" />
-  <link rel="icon" href="icon-v5.svg?v=3.7.0" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="icon-180.png?v=3.7.0" />
-  <link rel="stylesheet" href="style.css?v=3.7.0" />
+  <title>مصروفي | Masroofi V3.8</title>
+  <link rel="manifest" href="manifest.json?v=3.8.0" />
+  <link rel="icon" href="icon-v5.svg?v=3.8.0" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon-180.png?v=3.8.0" />
+  <link rel="stylesheet" href="style.css?v=3.8.0" />
 </head>
 <body>
   <div id="app" class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Masroofi V3.7</p>
+        <p class="eyebrow">Masroofi V3.8</p>
         <h1>مصروفي</h1>
       </div>
       <div class="auth-box">
@@ -167,6 +167,20 @@
         <button class="btn ghost full" data-nav="home">رجوع للرئيسية</button>
       </section>
 
+
+      <section id="view-archive" class="view">
+        <div class="page-head"><button class="btn ghost" data-nav="home">رجوع</button><h2>أرشيف الميزانيات</h2></div>
+        <section class="panel">
+          <div class="panel-title">
+            <h2>دورات الميزانية</h2>
+            <span>يعرض الدورات بناءً على بداية ونهاية الدورة الحالية</span>
+          </div>
+          <p class="muted">الأرشيف لا يحذف أي عملية. يمكنك فتح أي دورة لمشاهدة عملياتها، إحصاءاتها، الرسم البياني، أو تصديرها.</p>
+          <div id="archiveList" class="archive-list empty">لا توجد دورات بعد.</div>
+        </section>
+        <button class="btn ghost full" data-nav="home">رجوع للرئيسية</button>
+      </section>
+
       <section id="view-settings" class="view">
         <div class="page-head"><button class="btn ghost" data-nav="home">رجوع</button><h2>الإعدادات</h2></div>
         <section class="panel">
@@ -189,7 +203,7 @@
         </section>
         <section class="panel version-panel">
           <h2>معلومات التطبيق</h2>
-          <p class="muted">الإصدار الحالي: <strong>Masroofi V3.7</strong></p>
+          <p class="muted">الإصدار الحالي: <strong>Masroofi V3.8</strong></p>
         </section>
         <button class="btn ghost full" data-nav="home">رجوع للرئيسية</button>
       </section>
@@ -198,6 +212,7 @@
     <nav class="bottom-nav">
       <button data-nav="home" class="active">الرئيسية</button>
       <button data-nav="transactions">العمليات</button>
+      <button data-nav="archive">الأرشيف</button>
       <button data-open-expense class="fab">+</button>
       <button data-nav="reports">التقارير</button>
       <button data-nav="settings">الإعدادات</button>
@@ -255,6 +270,6 @@
   </dialog>
 
   <div id="toast" class="toast"></div>
-  <script type="module" src="app.js?v=3.7.0"></script>
+  <script type="module" src="app.js?v=3.8.0"></script>
 </body>
 </html>
